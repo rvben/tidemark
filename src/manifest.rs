@@ -28,6 +28,10 @@ pub struct Entry {
     pub target: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub mtime: Option<String>,
+    /// Stored text content for small UTF-8 files, enabling real content diffs.
+    /// Excluded from `tree_digest` (the content hash already covers changes).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub content: Option<String>,
 }
 
 /// A deterministic snapshot of a directory tree.
@@ -93,13 +97,22 @@ mod tests {
             hash: Some(hash.into()),
             target: None,
             mtime: None,
+            content: None,
         }
     }
 
     #[test]
     fn digest_is_order_independent() {
-        let a = Manifest::build("/r".into(), "t1".into(), vec![file("b", "h2"), file("a", "h1")]);
-        let b = Manifest::build("/r".into(), "t2".into(), vec![file("a", "h1"), file("b", "h2")]);
+        let a = Manifest::build(
+            "/r".into(),
+            "t1".into(),
+            vec![file("b", "h2"), file("a", "h1")],
+        );
+        let b = Manifest::build(
+            "/r".into(),
+            "t2".into(),
+            vec![file("a", "h1"), file("b", "h2")],
+        );
         assert_eq!(
             a.tree_digest, b.tree_digest,
             "digest must not depend on input order or created_at"
@@ -119,7 +132,10 @@ mod tests {
         let a = Manifest::build("/r".into(), "t".into(), vec![e.clone()]);
         e.mode = Some(0o755);
         let b = Manifest::build("/r".into(), "t".into(), vec![e]);
-        assert_ne!(a.tree_digest, b.tree_digest, "chmod must register as a change");
+        assert_ne!(
+            a.tree_digest, b.tree_digest,
+            "chmod must register as a change"
+        );
     }
 
     #[test]

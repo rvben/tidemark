@@ -71,10 +71,13 @@ impl Store {
         Self::validate_label(label)?;
         let path = self.path_for(label);
         if !path.exists() {
-            return Err(KairnError::not_found(format!("no snapshot labeled {label:?}")));
+            return Err(KairnError::not_found(format!(
+                "no snapshot labeled {label:?}"
+            )));
         }
         let data = std::fs::read_to_string(&path)?;
-        serde_json::from_str(&data).map_err(|e| KairnError::invalid(format!("corrupt manifest: {e}")))
+        serde_json::from_str(&data)
+            .map_err(|e| KairnError::invalid(format!("corrupt manifest: {e}")))
     }
 
     /// List stored snapshots, oldest first.
@@ -118,7 +121,9 @@ impl Store {
         Self::validate_label(label)?;
         let path = self.path_for(label);
         if !path.exists() {
-            return Err(KairnError::not_found(format!("no snapshot labeled {label:?}")));
+            return Err(KairnError::not_found(format!(
+                "no snapshot labeled {label:?}"
+            )));
         }
         std::fs::remove_file(&path)?;
         Ok(())
@@ -142,6 +147,7 @@ mod tests {
                 hash: Some(hash.into()),
                 target: None,
                 mtime: None,
+                content: None,
             }],
         )
     }

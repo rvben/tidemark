@@ -58,7 +58,12 @@ pub fn select_fields(items: Vec<Value>, fields: &[String]) -> Vec<Value> {
 }
 
 /// Wrap a page into the clispec list envelope.
-pub fn list_envelope(items: Vec<Value>, total: usize, limit: Option<usize>, offset: usize) -> Value {
+pub fn list_envelope(
+    items: Vec<Value>,
+    total: usize,
+    limit: Option<usize>,
+    offset: usize,
+) -> Value {
     serde_json::json!({
         "items": items,
         "total": total,

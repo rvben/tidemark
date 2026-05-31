@@ -40,6 +40,7 @@ pub fn walk_tree(root: &Path, opts: &WalkOptions) -> Result<Vec<RawEntry>, Kairn
         .git_exclude(opts.use_ignore)
         .ignore(opts.use_ignore)
         .parents(opts.use_ignore)
+        .require_git(false)
         .add_custom_ignore_filename(".kairnignore")
         .follow_links(false);
 
@@ -77,8 +78,13 @@ pub fn walk_tree(root: &Path, opts: &WalkOptions) -> Result<Vec<RawEntry>, Kairn
                 format!("non-UTF-8 path: {}", rel.display()),
             )
         })?;
+        let rel = rel.replace('\\', "/");
+        // kairn never records its own store, even when --hidden is set.
+        if rel == ".kairn" || rel.starts_with(".kairn/") {
+            continue;
+        }
         out.push(RawEntry {
-            rel: rel.replace('\\', "/"),
+            rel,
             abs: path.to_path_buf(),
         });
     }
@@ -126,6 +132,21 @@ mod tests {
         };
         let all = walk_tree(tmp.path(), &opts).unwrap();
         assert_eq!(all.len(), 1);
+    }
+
+    #[test]
+    fn always_excludes_own_store_even_when_hidden() {
+        let tmp = tempfile::tempdir().unwrap();
+        fs::create_dir_all(tmp.path().join(".kairn/snapshots")).unwrap();
+        fs::write(tmp.path().join(".kairn/snapshots/x.json"), b"{}").unwrap();
+        fs::write(tmp.path().join("real.txt"), b"x").unwrap();
+        let opts = WalkOptions {
+            hidden: true,
+            ..Default::default()
+        };
+        let got = walk_tree(tmp.path(), &opts).unwrap();
+        let rels: Vec<_> = got.iter().map(|e| e.rel.clone()).collect();
+        assert_eq!(rels, vec!["real.txt"]);
     }
 
     #[test]

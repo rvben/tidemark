@@ -196,6 +196,7 @@ mod tests {
             hash: Some(hash.into()),
             target: None,
             mtime: None,
+            content: None,
         }
     }
     fn man(entries: Vec<Entry>) -> Manifest {

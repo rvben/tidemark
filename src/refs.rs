@@ -1,10 +1,10 @@
 //! Resolve a ref string to a Manifest. A ref is `@` (current tree),
 //! a manifest file path, or a store label.
 
+use crate::builder::SnapOptions;
 use crate::error::KairnError;
 use crate::manifest::Manifest;
 use crate::store::Store;
-use crate::walk::WalkOptions;
 use std::path::Path;
 
 /// Resolve `r` against `base` (the directory whose store and tree we use).
@@ -12,10 +12,10 @@ pub fn resolve(
     r: &str,
     base: &Path,
     store: &Store,
-    walk_opts: &WalkOptions,
+    snap_opts: &SnapOptions,
 ) -> Result<Manifest, KairnError> {
     if r == "@" {
-        return crate::builder::build_manifest(base, walk_opts);
+        return crate::builder::build_manifest(base, snap_opts);
     }
     let as_path = Path::new(r);
     if as_path.is_file() {
@@ -30,7 +30,6 @@ pub fn resolve(
 mod tests {
     use super::*;
     use crate::store::Store;
-    use crate::walk::WalkOptions;
     use std::fs;
 
     #[test]
@@ -38,7 +37,7 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         fs::write(tmp.path().join("a.txt"), b"hi").unwrap();
         let store = Store::at(tmp.path());
-        let m = resolve("@", tmp.path(), &store, &WalkOptions::default()).unwrap();
+        let m = resolve("@", tmp.path(), &store, &SnapOptions::default()).unwrap();
         assert_eq!(m.entry_count, 1);
     }
 
@@ -47,9 +46,9 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         fs::write(tmp.path().join("a.txt"), b"hi").unwrap();
         let store = Store::at(tmp.path());
-        let snap = crate::builder::build_manifest(tmp.path(), &WalkOptions::default()).unwrap();
+        let snap = crate::builder::build_manifest(tmp.path(), &SnapOptions::default()).unwrap();
         store.save("before", &snap, false).unwrap();
-        let m = resolve("before", tmp.path(), &store, &WalkOptions::default()).unwrap();
+        let m = resolve("before", tmp.path(), &store, &SnapOptions::default()).unwrap();
         assert_eq!(m.tree_digest, snap.tree_digest);
     }
 
@@ -57,7 +56,7 @@ mod tests {
     fn file_path_resolves_as_manifest() {
         let tmp = tempfile::tempdir().unwrap();
         fs::write(tmp.path().join("a.txt"), b"hi").unwrap();
-        let snap = crate::builder::build_manifest(tmp.path(), &WalkOptions::default()).unwrap();
+        let snap = crate::builder::build_manifest(tmp.path(), &SnapOptions::default()).unwrap();
         let mpath = tmp.path().join("snap.kairn");
         fs::write(&mpath, serde_json::to_string(&snap).unwrap()).unwrap();
         let store = Store::at(tmp.path());
@@ -65,7 +64,7 @@ mod tests {
             mpath.to_str().unwrap(),
             tmp.path(),
             &store,
-            &WalkOptions::default(),
+            &SnapOptions::default(),
         )
         .unwrap();
         assert_eq!(m.tree_digest, snap.tree_digest);
