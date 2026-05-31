@@ -231,6 +231,44 @@ fn snap_to_stdout_when_output_dash() {
 }
 
 #[test]
+fn content_diff_works_between_two_stored_manifests() {
+    // Both sides are stored manifest files (neither is @). Because every snapshot
+    // stores inline text content, a real two-sided unified diff is still possible
+    // without the live tree. This locks in that property.
+    let tmp = tempfile::tempdir().unwrap();
+    fs::write(tmp.path().join("a.txt"), b"alpha\nbeta\ngamma\n").unwrap();
+    let before = tmp.path().join("before.kairn");
+    kairn(tmp.path())
+        .args(["snap", "--output-file", before.to_str().unwrap()])
+        .assert()
+        .success();
+    fs::write(tmp.path().join("a.txt"), b"alpha\nBETA\ngamma\n").unwrap();
+    let after = tmp.path().join("after.kairn");
+    kairn(tmp.path())
+        .args(["snap", "--output-file", after.to_str().unwrap()])
+        .assert()
+        .success();
+    let out = kairn(tmp.path())
+        .args([
+            "diff",
+            before.to_str().unwrap(),
+            after.to_str().unwrap(),
+            "--content",
+            "--output",
+            "json",
+        ])
+        .assert()
+        .success();
+    let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
+    let v: serde_json::Value = serde_json::from_str(&stdout).unwrap();
+    let preview = v["changes"][0]["content_preview"].as_str().unwrap();
+    assert!(
+        preview.contains("-beta") && preview.contains("+BETA"),
+        "two-manifest content diff should show old and new lines: {preview}"
+    );
+}
+
+#[test]
 fn diff_only_filters_change_kinds() {
     let tmp = tempfile::tempdir().unwrap();
     fs::write(tmp.path().join("keep.txt"), b"x").unwrap();
