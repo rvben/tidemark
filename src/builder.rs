@@ -36,38 +36,53 @@ pub fn build_manifest(root: &Path, opts: &SnapOptions) -> Result<Manifest, Kairn
     let raw = walk_tree(&canon, &opts.walk)?;
     let mut entries = Vec::with_capacity(raw.len());
     for r in raw {
-        let meta = std::fs::symlink_metadata(&r.abs)?;
-        let ft = meta.file_type();
-        let entry = if ft.is_symlink() {
-            Entry {
-                path: r.rel,
-                kind: EntryKind::Symlink,
-                size: None,
-                mode: mode_of(&meta),
-                hash: None,
-                target: Some(crate::hash::read_link(&r.abs)?),
-                mtime: mtime_of(&meta),
-                content: None,
-            }
-        } else {
-            let bytes = std::fs::read(&r.abs)?;
-            let hash = crate::hash::hash_bytes(&bytes);
-            let content = inline_content(&bytes, opts.store_content);
-            Entry {
-                path: r.rel,
-                kind: EntryKind::File,
-                size: Some(meta.len()),
-                mode: mode_of(&meta),
-                hash: Some(hash),
-                target: None,
-                mtime: mtime_of(&meta),
-                content,
-            }
-        };
-        entries.push(entry);
+        // A file that vanishes between the walk and this read no longer exists at
+        // snapshot time, so we skip it rather than aborting the whole snapshot.
+        if let Some(entry) = entry_for(&r.rel, &r.abs, opts.store_content)? {
+            entries.push(entry);
+        }
     }
     let root_str = canon.to_string_lossy().to_string();
     Ok(Manifest::build(root_str, now_rfc3339(), entries))
+}
+
+/// Build a single manifest entry for `abs` (recorded as `rel`). Returns
+/// `Ok(None)` if the path no longer exists (a benign mid-snapshot deletion).
+fn entry_for(rel: &str, abs: &Path, store_content: bool) -> Result<Option<Entry>, KairnError> {
+    let meta = match std::fs::symlink_metadata(abs) {
+        Ok(m) => m,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(e) => return Err(e.into()),
+    };
+    if meta.file_type().is_symlink() {
+        return Ok(Some(Entry {
+            path: rel.to_string(),
+            kind: EntryKind::Symlink,
+            size: None,
+            mode: mode_of(&meta),
+            hash: None,
+            target: Some(crate::hash::read_link(abs)?),
+            mtime: mtime_of(&meta),
+            content: None,
+        }));
+    }
+    let bytes = match std::fs::read(abs) {
+        Ok(b) => b,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(e) => return Err(e.into()),
+    };
+    let hash = crate::hash::hash_bytes(&bytes);
+    let content = inline_content(&bytes, store_content);
+    Ok(Some(Entry {
+        path: rel.to_string(),
+        kind: EntryKind::File,
+        size: Some(meta.len()),
+        mode: mode_of(&meta),
+        hash: Some(hash),
+        target: None,
+        mtime: mtime_of(&meta),
+        content,
+    }))
 }
 
 /// Return inline text content for small UTF-8 files when storage is enabled.

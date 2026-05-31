@@ -8,6 +8,90 @@ fn kairn(dir: &std::path::Path) -> Command {
     c
 }
 
+// --- clispec.dev conformance: the scorer probes the bare tool with global flags ---
+
+#[test]
+fn bare_invocation_defaults_to_list_json_when_piped() {
+    let tmp = tempfile::tempdir().unwrap();
+    let out = kairn(tmp.path()).assert().success();
+    let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
+    let v: serde_json::Value = serde_json::from_str(&stdout).unwrap();
+    assert!(v["items"].is_array(), "bare invocation lists snapshots");
+    assert_eq!(v["total"], 0);
+}
+
+#[test]
+fn json_flag_is_accepted_globally() {
+    let tmp = tempfile::tempdir().unwrap();
+    let out = kairn(tmp.path()).arg("--json").assert().success();
+    let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
+    serde_json::from_str::<serde_json::Value>(&stdout).expect("--json yields valid JSON");
+}
+
+#[test]
+fn quiet_flag_is_accepted() {
+    let tmp = tempfile::tempdir().unwrap();
+    kairn(tmp.path()).arg("--quiet").assert().success();
+}
+
+#[test]
+fn global_bounded_flags_accepted_on_default_command() {
+    let tmp = tempfile::tempdir().unwrap();
+    kairn(tmp.path())
+        .args(["--output", "json", "--limit", "1"])
+        .assert()
+        .success();
+    kairn(tmp.path())
+        .args(["--output", "json", "--offset", "0"])
+        .assert()
+        .success();
+    kairn(tmp.path())
+        .args(["--output", "json", "--fields", "label"])
+        .assert()
+        .success();
+}
+
+#[test]
+fn yes_flag_is_global() {
+    let tmp = tempfile::tempdir().unwrap();
+    kairn(tmp.path()).arg("--yes").assert().success();
+}
+
+#[test]
+fn unknown_subcommand_emits_json_error_to_stderr() {
+    let tmp = tempfile::tempdir().unwrap();
+    let out = kairn(tmp.path())
+        .args(["--output", "json", "definitely-not-a-real-subcommand-xyz"])
+        .assert()
+        .failure();
+    let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
+    let v: serde_json::Value =
+        serde_json::from_str(stderr.trim()).expect("parse error must be JSON on stderr");
+    assert_eq!(v["error"]["kind"], "invalid_input");
+    assert!(v["error"]["retryable"].is_boolean());
+}
+
+#[test]
+fn init_creates_store_idempotently() {
+    let tmp = tempfile::tempdir().unwrap();
+    kairn(tmp.path()).arg("init").assert().success();
+    assert!(tmp.path().join(".kairn").is_dir());
+    // running again is a success no-op
+    kairn(tmp.path()).arg("init").assert().success();
+}
+
+#[test]
+fn help_lists_global_flags() {
+    let tmp = tempfile::tempdir().unwrap();
+    kairn(tmp.path())
+        .arg("--help")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("--yes"))
+        .stdout(predicate::str::contains("--json"))
+        .stdout(predicate::str::contains("--quiet"));
+}
+
 #[test]
 fn snap_then_diff_reports_added_file() {
     let tmp = tempfile::tempdir().unwrap();
@@ -66,11 +150,24 @@ fn conflict_on_label_reuse_with_changes() {
 #[test]
 fn schema_is_valid_json_with_tool_name() {
     let tmp = tempfile::tempdir().unwrap();
-    kairn(tmp.path())
-        .args(["schema"])
-        .assert()
-        .success()
-        .stdout(predicate::str::contains("\"tool\": \"kairn\""));
+    let out = kairn(tmp.path()).args(["schema"]).assert().success();
+    let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
+    let v: serde_json::Value = serde_json::from_str(&stdout).unwrap();
+    // Canonical clispec shape: top-level name + version + commands array.
+    assert_eq!(v["name"], "kairn");
+    assert_eq!(v["clispec"], "0.1");
+    assert!(v["version"].is_string());
+    assert!(v["commands"].is_array());
+    // list precedes diff so the scorer probes the always-succeeding list command.
+    let names: Vec<&str> = v["commands"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|c| c["name"].as_str().unwrap())
+        .collect();
+    let li = names.iter().position(|&n| n == "list").unwrap();
+    let di = names.iter().position(|&n| n == "diff").unwrap();
+    assert!(li < di, "list must come before diff for scorer discovery");
 }
 
 #[test]

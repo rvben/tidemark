@@ -21,8 +21,26 @@ struct Cli {
     /// Output format. Defaults to json when piped, table on a terminal.
     #[arg(long, global = true, value_enum)]
     output: Option<FormatArg>,
+    /// Shorthand for `--output json`.
+    #[arg(long, global = true)]
+    json: bool,
+    /// Suppress diagnostics on stderr (data on stdout is unaffected).
+    #[arg(long, global = true)]
+    quiet: bool,
+    /// Assume yes for destructive prompts (required to delete non-interactively).
+    #[arg(long, global = true)]
+    yes: bool,
+    /// Limit the number of items in list/diff output.
+    #[arg(long, global = true)]
+    limit: Option<usize>,
+    /// Skip this many items in list/diff output.
+    #[arg(long, global = true, default_value_t = 0)]
+    offset: usize,
+    /// Restrict output objects to these fields (comma-separated).
+    #[arg(long, global = true, value_delimiter = ',')]
+    fields: Vec<String>,
     #[command(subcommand)]
-    command: Command,
+    command: Option<Command>,
 }
 
 #[derive(Copy, Clone, ValueEnum)]
@@ -69,30 +87,18 @@ enum Command {
         #[arg(long, value_delimiter = ',')]
         only: Vec<ChangeKindArg>,
         #[arg(long)]
-        limit: Option<usize>,
-        #[arg(long, default_value_t = 0)]
-        offset: usize,
-        #[arg(long, value_delimiter = ',')]
-        fields: Vec<String>,
-        #[arg(long)]
         exit_code: bool,
     },
     /// List stored snapshots.
-    List {
-        #[arg(long)]
-        limit: Option<usize>,
-        #[arg(long, default_value_t = 0)]
-        offset: usize,
-        #[arg(long, value_delimiter = ',')]
-        fields: Vec<String>,
-    },
+    List,
     /// Show a manifest by ref.
     Show { reference: String },
     /// Remove stored snapshots.
-    Rm {
-        labels: Vec<String>,
-        #[arg(long)]
-        yes: bool,
+    Rm { labels: Vec<String> },
+    /// Create the snapshot store in the current directory (idempotent).
+    Init {
+        #[arg(long, default_value = ".")]
+        path: PathBuf,
     },
     /// Emit the clispec schema.
     Schema,
@@ -104,6 +110,16 @@ enum ChangeKindArg {
     Modified,
     Deleted,
     Renamed,
+}
+
+/// Cross-cutting options shared by every command.
+struct Ctx {
+    fmt: Format,
+    quiet: bool,
+    yes: bool,
+    limit: Option<usize>,
+    offset: usize,
+    fields: Vec<String>,
 }
 
 fn snap_opts(
@@ -124,13 +140,56 @@ fn snap_opts(
 
 /// Entry point used by `main`. Returns a process exit code.
 pub fn run() -> i32 {
-    let cli = Cli::parse();
+    let cli = match Cli::try_parse() {
+        Ok(c) => c,
+        Err(e) => return handle_parse_error(e),
+    };
     let stdout_is_tty = std::io::stdout().is_terminal();
-    let fmt = output::resolve_format(cli.output.map(Into::into), stdout_is_tty);
-    match dispatch(cli.command, fmt) {
+    let fmt = if cli.json {
+        Format::Json
+    } else {
+        output::resolve_format(cli.output.map(Into::into), stdout_is_tty)
+    };
+    let ctx = Ctx {
+        fmt,
+        quiet: cli.quiet,
+        yes: cli.yes,
+        limit: cli.limit,
+        offset: cli.offset,
+        fields: cli.fields,
+    };
+    // No subcommand defaults to listing stored snapshots.
+    let command = cli.command.unwrap_or(Command::List);
+    match dispatch(command, &ctx) {
         Ok(code) => code,
         Err(e) => {
             emit_error(&e);
+            2
+        }
+    }
+}
+
+/// Map a clap parse failure to either help/version output (exit 0) or a
+/// structured JSON error on stderr (exit 2), per clispec.
+fn handle_parse_error(e: clap::Error) -> i32 {
+    use clap::error::ErrorKind as CK;
+    match e.kind() {
+        CK::DisplayHelp | CK::DisplayVersion | CK::DisplayHelpOnMissingArgumentOrSubcommand => {
+            print!("{e}");
+            0
+        }
+        _ => {
+            let message = e
+                .to_string()
+                .lines()
+                .next()
+                .unwrap_or("invalid arguments")
+                .trim_start_matches("error: ")
+                .to_string();
+            let payload = serde_json::json!({
+                "error": { "kind": "invalid_input", "message": message, "retryable": false }
+            });
+            eprintln!("{payload}");
             2
         }
     }
@@ -143,12 +202,13 @@ fn emit_error(e: &KairnError) {
     eprintln!("{payload}");
 }
 
-fn dispatch(cmd: Command, fmt: Format) -> Result<i32, KairnError> {
+fn dispatch(cmd: Command, ctx: &Ctx) -> Result<i32, KairnError> {
     match cmd {
         Command::Schema => {
             print_json(&crate::schema::schema());
             Ok(0)
         }
+        Command::Init { path } => cmd_init(&path, ctx),
         Command::Snap {
             label,
             path,
@@ -167,26 +227,30 @@ fn dispatch(cmd: Command, fmt: Format) -> Result<i32, KairnError> {
             no_ignore,
             no_content,
             force,
-            fmt,
+            ctx,
         ),
         Command::Diff {
             a,
             b,
             content,
             only,
-            limit,
-            offset,
-            fields,
             exit_code,
-        } => cmd_diff(a, b, content, only, limit, offset, fields, exit_code, fmt),
-        Command::List {
-            limit,
-            offset,
-            fields,
-        } => cmd_list(limit, offset, fields, fmt),
+        } => cmd_diff(a, b, content, only, exit_code, ctx),
+        Command::List => cmd_list(ctx),
         Command::Show { reference } => cmd_show(reference),
-        Command::Rm { labels, yes } => cmd_rm(labels, yes),
+        Command::Rm { labels } => cmd_rm(labels, ctx),
     }
+}
+
+fn cmd_init(path: &std::path::Path, ctx: &Ctx) -> Result<i32, KairnError> {
+    let store = Store::at(path);
+    store.init()?;
+    let payload = serde_json::json!({ "initialized": true, "path": ".kairn" });
+    match ctx.fmt {
+        Format::Json => print_json(&payload),
+        Format::Table => println!("initialized store at .kairn"),
+    }
+    Ok(0)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -199,7 +263,7 @@ fn cmd_snap(
     no_ignore: bool,
     no_content: bool,
     force: bool,
-    fmt: Format,
+    ctx: &Ctx,
 ) -> Result<i32, KairnError> {
     let opts = snap_opts(hidden, no_ignore, ignore, !no_content);
     let manifest = crate::builder::build_manifest(&path, &opts)?;
@@ -225,7 +289,7 @@ fn cmd_snap(
     }
 
     // Default destination: no label and no -o, piped -> write manifest to stdout.
-    if label.is_none() && output_file.is_none() && matches!(fmt, Format::Json) {
+    if label.is_none() && output_file.is_none() && matches!(ctx.fmt, Format::Json) {
         print_json(&serde_json::to_value(&manifest).unwrap());
         return Ok(0);
     }
@@ -240,7 +304,7 @@ fn cmd_snap(
         "entry_count": manifest.entry_count,
         "created": created
     });
-    match fmt {
+    match ctx.fmt {
         Format::Json => print_json(&summary),
         Format::Table => {
             let label_suffix = match &label {
@@ -256,17 +320,13 @@ fn cmd_snap(
     Ok(0)
 }
 
-#[allow(clippy::too_many_arguments)]
 fn cmd_diff(
     a: Option<String>,
     b: Option<String>,
     content: bool,
     only: Vec<ChangeKindArg>,
-    limit: Option<usize>,
-    offset: usize,
-    fields: Vec<String>,
     exit_code: bool,
-    fmt: Format,
+    ctx: &Ctx,
 ) -> Result<i32, KairnError> {
     let base = PathBuf::from(".");
     let store = Store::at(&base);
@@ -280,6 +340,7 @@ fn cmd_diff(
         report
             .changes
             .retain(|c| only.iter().any(|k| matches_kind(k, &c.kind)));
+        report.recount();
     }
     if content {
         attach_content(&mut report, &old, &new);
@@ -290,8 +351,8 @@ fn cmd_diff(
         .iter()
         .map(|c| serde_json::to_value(c).unwrap())
         .collect();
-    let (page, total) = output::paginate(all, offset, limit);
-    let page = output::select_fields(page, &fields);
+    let (page, total) = output::paginate(all, ctx.offset, ctx.limit);
+    let page = output::select_fields(page, &ctx.fields);
     let changed = total > 0;
     let env = serde_json::json!({
         "changes": page,
@@ -300,12 +361,12 @@ fn cmd_diff(
         "deleted": report.deleted,
         "renamed": report.renamed,
         "total": total,
-        "limit": limit,
-        "offset": offset
+        "limit": ctx.limit,
+        "offset": ctx.offset
     });
-    match fmt {
+    match ctx.fmt {
         Format::Json => print_json(&env),
-        Format::Table => print_diff_table(&report, &page),
+        Format::Table => print_diff_table(&report, &page, ctx.quiet),
     }
     if exit_code {
         Ok(if changed { 1 } else { 0 })
@@ -314,23 +375,18 @@ fn cmd_diff(
     }
 }
 
-fn cmd_list(
-    limit: Option<usize>,
-    offset: usize,
-    fields: Vec<String>,
-    fmt: Format,
-) -> Result<i32, KairnError> {
+fn cmd_list(ctx: &Ctx) -> Result<i32, KairnError> {
     let store = Store::at(&PathBuf::from("."));
     let items = store.list()?;
     let values: Vec<serde_json::Value> = items
         .iter()
         .map(|i| serde_json::to_value(i).unwrap())
         .collect();
-    let (page, total) = output::paginate(values, offset, limit);
-    let page = output::select_fields(page, &fields);
-    match fmt {
+    let (page, total) = output::paginate(values, ctx.offset, ctx.limit);
+    let page = output::select_fields(page, &ctx.fields);
+    match ctx.fmt {
         Format::Json => {
-            let env = output::list_envelope(page, total, limit, offset);
+            let env = output::list_envelope(page, total, ctx.limit, ctx.offset);
             print_json(&env);
         }
         Format::Table => {
@@ -350,16 +406,16 @@ fn cmd_list(
 fn cmd_show(reference: String) -> Result<i32, KairnError> {
     let base = PathBuf::from(".");
     let store = Store::at(&base);
-    let m = crate::refs::resolve(&reference, &base, &store, &WalkOptions::default())?;
+    let m = crate::refs::resolve(&reference, &base, &store, &SnapOptions::default())?;
     print_json(&serde_json::to_value(&m).unwrap());
     Ok(0)
 }
 
-fn cmd_rm(labels: Vec<String>, yes: bool) -> Result<i32, KairnError> {
+fn cmd_rm(labels: Vec<String>, ctx: &Ctx) -> Result<i32, KairnError> {
     if labels.is_empty() {
         return Err(KairnError::invalid("no labels given"));
     }
-    if !yes && !std::io::stdin().is_terminal() {
+    if !ctx.yes && !std::io::stdin().is_terminal() {
         return Err(KairnError::invalid(
             "refusing to delete without --yes in non-interactive mode",
         ));
@@ -402,30 +458,28 @@ fn resolve_diff_refs(
     }
 }
 
-/// Attach a content preview for modified files when the NEW side is the current
-/// tree (`@`). Manifests store hashes, not bytes, so the old side cannot be
-/// reconstructed; we surface the current file body under a unified header.
-fn attach_content(
-    report: &mut crate::diff::DiffReport,
-    base: &Path,
-    bref: &str,
-) -> Result<(), KairnError> {
-    if bref != "@" {
-        return Ok(());
-    }
+/// Attach a real unified content diff for modified files using the inline text
+/// content stored in both manifests. When either side lacks stored content
+/// (binary, oversized, or snapped with `--no-content`), the preview reports that
+/// instead of a line diff.
+fn attach_content(report: &mut crate::diff::DiffReport, old: &Manifest, new: &Manifest) {
     for c in report.changes.iter_mut() {
         if !matches!(c.kind, crate::diff::ChangeKind::Modified) {
             continue;
         }
-        let p = base.join(&c.path);
-        if let Ok(bytes) = std::fs::read(&p) {
-            match String::from_utf8(bytes) {
-                Ok(text) => c.content_preview = Some(text),
-                Err(_) => c.content_preview = Some("<binary changed>".to_string()),
-            }
-        }
+        c.content_preview = Some(match (content_of(old, &c.path), content_of(new, &c.path)) {
+            (Some(o), Some(n)) => crate::diff::unified_diff(o, n, &c.path),
+            _ => "<content unavailable (binary, too large, or --no-content)>".to_string(),
+        });
     }
-    Ok(())
+}
+
+/// Look up the inline text content for `path` in a manifest, if stored.
+fn content_of<'a>(m: &'a Manifest, path: &str) -> Option<&'a str> {
+    m.entries
+        .iter()
+        .find(|e| e.path == path)
+        .and_then(|e| e.content.as_deref())
 }
 
 fn print_json(v: &serde_json::Value) {
@@ -433,7 +487,7 @@ fn print_json(v: &serde_json::Value) {
     let _ = writeln!(out, "{}", serde_json::to_string_pretty(v).unwrap());
 }
 
-fn print_diff_table(report: &crate::diff::DiffReport, page: &[serde_json::Value]) {
+fn print_diff_table(report: &crate::diff::DiffReport, page: &[serde_json::Value], quiet: bool) {
     use owo_colors::OwoColorize;
     let color = std::env::var_os("NO_COLOR").is_none() && std::io::stdout().is_terminal();
     for c in page {
@@ -464,8 +518,10 @@ fn print_diff_table(report: &crate::diff::DiffReport, page: &[serde_json::Value]
             }
         }
     }
-    eprintln!(
-        "{} added, {} modified, {} deleted, {} renamed",
-        report.added, report.modified, report.deleted, report.renamed
-    );
+    if !quiet {
+        eprintln!(
+            "{} added, {} modified, {} deleted, {} renamed",
+            report.added, report.modified, report.deleted, report.renamed
+        );
+    }
 }

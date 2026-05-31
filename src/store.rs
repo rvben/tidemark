@@ -26,6 +26,12 @@ impl Store {
         }
     }
 
+    /// Create the store directory. Idempotent: succeeds if it already exists.
+    pub fn init(&self) -> Result<(), KairnError> {
+        std::fs::create_dir_all(self.snap_dir())?;
+        Ok(())
+    }
+
     fn snap_dir(&self) -> PathBuf {
         self.root.join("snapshots")
     }
@@ -195,6 +201,15 @@ mod tests {
             s.load_label("nope").unwrap_err().kind,
             crate::error::ErrorKind::NotFound
         );
+    }
+
+    #[test]
+    fn init_is_idempotent() {
+        let tmp = tempfile::tempdir().unwrap();
+        let s = Store::at(tmp.path());
+        s.init().unwrap();
+        assert!(tmp.path().join(".kairn/snapshots").is_dir());
+        s.init().unwrap(); // second call must not error
     }
 
     #[test]

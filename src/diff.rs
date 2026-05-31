@@ -1,8 +1,8 @@
 //! Pure diff over two manifests.
 
-use crate::manifest::{Entry, Manifest};
+use crate::manifest::{Entry, EntryKind, Manifest};
 use serde::Serialize;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 
 /// The classification of a single change.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -45,6 +45,17 @@ impl DiffReport {
     pub fn is_empty(&self) -> bool {
         self.changes.is_empty()
     }
+
+    /// Recompute the summary counts from `self.changes`. Call after mutating
+    /// `changes` (e.g. applying an `--only` filter) so the counts always match
+    /// the change list.
+    pub fn recount(&mut self) {
+        let count = |k: &ChangeKind| self.changes.iter().filter(|c| &c.kind == k).count();
+        self.added = count(&ChangeKind::Added);
+        self.modified = count(&ChangeKind::Modified);
+        self.deleted = count(&ChangeKind::Deleted);
+        self.renamed = count(&ChangeKind::Renamed);
+    }
 }
 
 fn entry_changed(a: &Entry, b: &Entry) -> bool {
@@ -76,24 +87,41 @@ pub fn diff(old: &Manifest, new: &Manifest) -> DiffReport {
         }
     }
 
-    // Rename detection: match deleted+added with identical hash+mode+kind.
+    // Rename detection: pair a deleted entry with an added entry only when their
+    // (hash, mode, kind) signature is unambiguous - exactly one deleted and one
+    // added entry share it. Duplicate-content files (e.g. several empty files all
+    // sharing the empty-input hash) stay as plain add/delete rather than being
+    // cross-paired into misleading renames.
+    type Sig<'a> = (&'a str, Option<u32>, EntryKind);
+    let mut del_by_sig: HashMap<Sig, Vec<usize>> = HashMap::new();
+    let mut add_by_sig: HashMap<Sig, Vec<usize>> = HashMap::new();
+    for (i, de) in deleted.iter().enumerate() {
+        if let Some(h) = de.hash.as_deref() {
+            del_by_sig.entry((h, de.mode, de.kind)).or_default().push(i);
+        }
+    }
+    for (i, ae) in added.iter().enumerate() {
+        if let Some(h) = ae.hash.as_deref() {
+            add_by_sig.entry((h, ae.mode, ae.kind)).or_default().push(i);
+        }
+    }
+
     let mut renamed: Vec<(&Entry, &Entry)> = Vec::new();
     let mut used_added = vec![false; added.len()];
     let mut used_deleted = vec![false; deleted.len()];
-    for (di, de) in deleted.iter().enumerate() {
-        if de.hash.is_none() {
+    for (sig, dels) in &del_by_sig {
+        if dels.len() != 1 {
             continue;
         }
-        for (ai, ae) in added.iter().enumerate() {
-            if used_added[ai] {
+        if let Some(adds) = add_by_sig.get(sig) {
+            if adds.len() != 1 {
                 continue;
             }
-            if de.hash == ae.hash && de.mode == ae.mode && de.kind == ae.kind {
-                renamed.push((de, ae));
-                used_added[ai] = true;
-                used_deleted[di] = true;
-                break;
-            }
+            let di = dels[0];
+            let ai = adds[0];
+            renamed.push((deleted[di], added[ai]));
+            used_deleted[di] = true;
+            used_added[ai] = true;
         }
     }
 
@@ -154,14 +182,15 @@ pub fn diff(old: &Manifest, new: &Manifest) -> DiffReport {
     }
     changes.sort_by(|a, b| a.path.cmp(&b.path));
 
-    let counts = |k: &ChangeKind| changes.iter().filter(|c| &c.kind == k).count();
-    DiffReport {
-        added: counts(&ChangeKind::Added),
-        modified: counts(&ChangeKind::Modified),
-        deleted: counts(&ChangeKind::Deleted),
-        renamed: counts(&ChangeKind::Renamed),
+    let mut report = DiffReport {
         changes,
-    }
+        added: 0,
+        modified: 0,
+        deleted: 0,
+        renamed: 0,
+    };
+    report.recount();
+    report
 }
 
 /// Produce a unified diff between two text blobs for display.
@@ -233,6 +262,33 @@ mod tests {
         assert_eq!(d.added, 0);
         assert_eq!(d.deleted, 0);
         assert_eq!(d.changes[0].from_path.as_deref(), Some("old_name"));
+    }
+
+    #[test]
+    fn ambiguous_identical_content_is_not_a_rename() {
+        // Two deleted + two added files all sharing one hash (e.g. empty files):
+        // the pairing is ambiguous, so they must be reported as plain add/delete,
+        // never as misleading renames.
+        let old = man(vec![file("d1", "EMPTY"), file("d2", "EMPTY")]);
+        let new = man(vec![file("a1", "EMPTY"), file("a2", "EMPTY")]);
+        let d = diff(&old, &new);
+        assert_eq!(
+            d.renamed, 0,
+            "ambiguous identical-content files must not be renames"
+        );
+        assert_eq!(d.deleted, 2);
+        assert_eq!(d.added, 2);
+    }
+
+    #[test]
+    fn one_to_many_identical_content_is_not_a_rename() {
+        // One deleted, two added with the same hash: still ambiguous.
+        let old = man(vec![file("d1", "DUP")]);
+        let new = man(vec![file("a1", "DUP"), file("a2", "DUP")]);
+        let d = diff(&old, &new);
+        assert_eq!(d.renamed, 0);
+        assert_eq!(d.deleted, 1);
+        assert_eq!(d.added, 2);
     }
 
     #[test]

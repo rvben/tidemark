@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 pub const MANIFEST_VERSION: u32 = 1;
 
 /// The kind of filesystem entry recorded in a manifest.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum EntryKind {
     File,
