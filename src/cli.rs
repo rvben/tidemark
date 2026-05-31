@@ -485,6 +485,7 @@ fn content_of<'a>(m: &'a Manifest, path: &str) -> Option<&'a str> {
 fn print_json(v: &serde_json::Value) {
     let mut out = std::io::stdout().lock();
     let _ = writeln!(out, "{}", serde_json::to_string_pretty(v).unwrap());
+    let _ = out.flush();
 }
 
 fn print_diff_table(report: &crate::diff::DiffReport, page: &[serde_json::Value], quiet: bool) {
