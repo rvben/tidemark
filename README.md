@@ -1,11 +1,11 @@
-# kairn
+# tidemark
 
 Snapshot a directory tree and diff exactly what changed - no git required.
 
-A *kairn* (a phonetic spelling of "cairn") is a stack of stones left to mark a
-spot so a traveller can tell what has changed when they return. `kairn` does the
-same for a directory: leave a marker, do anything, then see precisely what was
-added, modified, deleted, or renamed.
+A *tidemark* is the line a receding tide leaves behind, recording the level the
+water reached so you can see how things stood before. `tidemark` does the same
+for a directory: leave a mark, do anything, then see precisely what was added,
+modified, deleted, or renamed.
 
 It scores **100/100** against [The CLI Spec](https://clispec.dev): structured
 output, schema introspection, clean stdout/stderr separation, non-interactive by
@@ -16,14 +16,14 @@ terminal and for AI agents in a pipeline.
 
 "What did that command actually do to my files?" is a question without a good
 answer today. `git` needs a repo and pollutes the tree; `fsdiff` was archived;
-copy-based tools need two full copies. `kairn` is a small, deterministic
+copy-based tools need two full copies. `tidemark` is a small, deterministic
 (BLAKE3) witness that answers it in one bounded call.
 
 ## Install
 
 ```
-cargo install kairn
-brew install rvben/tap/kairn
+cargo install tidemark
+brew install rvben/tap/tidemark
 ```
 
 ## Quick start
@@ -31,30 +31,30 @@ brew install rvben/tap/kairn
 Human workflow with a labeled checkpoint:
 
 ```
-kairn snap before        # checkpoint the current tree
-make install             # do the risky thing
-kairn diff before        # colored table of what changed
+tidemark snap before        # checkpoint the current tree
+make install                # do the risky thing
+tidemark diff before        # colored table of what changed
 ```
 
 Agent / CI workflow with a portable manifest:
 
 ```
-kairn snap -o pre.kairn          # write a manifest file (use - for stdout)
+tidemark snap -o pre.tidemark        # write a manifest file (use - for stdout)
 ./run-some-tool
-kairn diff pre.kairn @ --json    # bounded JSON delta in one call
+tidemark diff pre.tidemark @ --json  # bounded JSON delta in one call
 ```
 
 ## Commands
 
 | Command | Description |
 | --- | --- |
-| `kairn snap [LABEL]` | Snapshot the tree. `LABEL` stores it under `.kairn/`; `-o FILE` writes a portable manifest (`-` = stdout). |
-| `kairn diff [A] [B]` | Diff two refs. A ref is a label, a manifest file, or `@` (current tree). `kairn diff before` means `before` vs `@`. |
-| `kairn list` | List stored snapshots. Also the default when no command is given. |
-| `kairn show REF` | Print a manifest. |
-| `kairn rm LABEL... --yes` | Delete stored snapshots. |
-| `kairn init` | Create the `.kairn/` store in the current directory (idempotent). |
-| `kairn schema` | Emit the clispec schema describing every command and output field. |
+| `tidemark snap [LABEL]` | Snapshot the tree. `LABEL` stores it under `.tidemark/`; `-o FILE` writes a portable manifest (`-` = stdout). |
+| `tidemark diff [A] [B]` | Diff two refs. A ref is a label, a manifest file, or `@` (current tree). `tidemark diff before` means `before` vs `@`. |
+| `tidemark list` | List stored snapshots. Also the default when no command is given. |
+| `tidemark show REF` | Print a manifest. |
+| `tidemark rm LABEL... --yes` | Delete stored snapshots. |
+| `tidemark init` | Create the `.tidemark/` store in the current directory (idempotent). |
+| `tidemark schema` | Emit the clispec schema describing every command and output field. |
 
 ### Useful flags
 

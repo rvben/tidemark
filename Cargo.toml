@@ -1,10 +1,10 @@
 [package]
-name = "kairn"
+name = "tidemark"
 version = "0.1.0"
 edition = "2024"
 description = "Snapshot a directory tree and diff what changed - no git required. Built for humans and agents."
 license = "MIT"
-repository = "https://github.com/rvben/kairn"
+repository = "https://github.com/rvben/tidemark"
 keywords = ["filesystem", "diff", "snapshot", "cli", "agent"]
 categories = ["command-line-utilities", "filesystem"]
 

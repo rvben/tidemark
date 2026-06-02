@@ -22,12 +22,12 @@ impl ErrorKind {
 
 /// An error with a clispec `kind` and a human-readable message.
 #[derive(Debug)]
-pub struct KairnError {
+pub struct TidemarkError {
     pub kind: ErrorKind,
     pub message: String,
 }
 
-impl KairnError {
+impl TidemarkError {
     pub fn new(kind: ErrorKind, message: impl Into<String>) -> Self {
         Self {
             kind,
@@ -48,16 +48,16 @@ impl KairnError {
     }
 }
 
-impl fmt::Display for KairnError {
+impl fmt::Display for TidemarkError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.message)
     }
 }
-impl std::error::Error for KairnError {}
+impl std::error::Error for TidemarkError {}
 
-impl From<std::io::Error> for KairnError {
+impl From<std::io::Error> for TidemarkError {
     fn from(e: std::io::Error) -> Self {
-        KairnError::io(e.to_string())
+        TidemarkError::io(e.to_string())
     }
 }
 

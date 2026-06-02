@@ -1,11 +1,11 @@
-# kairn for agents
+# tidemark for agents
 
-`kairn` is a deterministic filesystem snapshot/diff tool designed to be driven by
-AI agents. This document is the operational contract.
+`tidemark` is a deterministic filesystem snapshot/diff tool designed to be driven
+by AI agents. This document is the operational contract.
 
 ## Discover capabilities
 
-Run `kairn schema` first. It returns a clispec v0.1 document listing every
+Run `tidemark schema` first. It returns a clispec v0.1 document listing every
 command, its arguments (name, type, required, default), output fields, error
 kinds (each with a `retryable` flag), exit-code semantics, and which commands
 mutate state (`mutating: true`). The schema is the source of truth; prefer it
@@ -32,21 +32,21 @@ over parsing help text.
 - `list` uses the envelope `{"items": [...], "total": N, "limit": L, "offset": O}`.
 - Bound large results with `--limit` / `--offset`, and trim fields with
   `--fields path,kind`. These flags are global (accepted on any command).
-- Running `kairn` with no command lists stored snapshots.
+- Running `tidemark` with no command lists stored snapshots.
 
 ## Recommended pattern
 
 ```
-kairn snap -o pre.kairn          # portable manifest (or: kairn snap before)
+tidemark snap -o pre.tidemark        # portable manifest (or: tidemark snap before)
 <run the operation under test>
-kairn diff pre.kairn @ --json    # @ means "the current tree"
+tidemark diff pre.tidemark @ --json  # @ means "the current tree"
 ```
 
 A ref (the `A`/`B` of `diff`) is one of: a store label, a path to a manifest
-file, or `@` for the live tree. `kairn diff before` is shorthand for
-`kairn diff before @`. A bare ref resolves to a store label first, falling back
-to a same-named file only if no such label exists. `kairn init` creates the
-`.kairn/` store explicitly (idempotent).
+file, or `@` for the live tree. `tidemark diff before` is shorthand for
+`tidemark diff before @`. A bare ref resolves to a store label first, falling
+back to a same-named file only if no such label exists. `tidemark init` creates
+the `.tidemark/` store explicitly (idempotent).
 
 ## Determinism and idempotency
 
@@ -54,9 +54,9 @@ to a same-named file only if no such label exists. `kairn init` creates the
   an unchanged tree are byte-for-byte identical in digest.
 - `mtime` never affects change detection, so rebuilds and `touch` do not produce
   spurious diffs.
-- `kairn snap LABEL` on an unchanged tree is a success no-op (exit 0). Re-using a
-  label for a *different* tree returns the `conflict` error kind (exit 2) unless
-  you pass `--force`.
+- `tidemark snap LABEL` on an unchanged tree is a success no-op (exit 0).
+  Re-using a label for a *different* tree returns the `conflict` error kind
+  (exit 2) unless you pass `--force`.
 - A file that vanishes between the directory walk and its read is skipped, so a
   concurrent deletion mid-snapshot does not abort the whole snapshot.
 
@@ -90,5 +90,5 @@ unavailable instead.
 ## Safety
 
 - Destructive `rm` refuses to run without `--yes` when stdin is not a TTY.
-- kairn never records its own `.kairn/` store directory in a snapshot.
+- tidemark never records its own `.tidemark/` store directory in a snapshot.
 - Labels are validated against path traversal and control characters.

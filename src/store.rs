@@ -1,10 +1,10 @@
-//! Labeled snapshot store under `.kairn/snapshots/`.
+//! Labeled snapshot store under `.tidemark/snapshots/`.
 
-use crate::error::KairnError;
+use crate::error::TidemarkError;
 use crate::manifest::Manifest;
 use std::path::{Path, PathBuf};
 
-/// A labeled snapshot store rooted at `<base>/.kairn`.
+/// A labeled snapshot store rooted at `<base>/.tidemark`.
 pub struct Store {
     root: PathBuf,
 }
@@ -19,15 +19,15 @@ pub struct StoreItem {
 }
 
 impl Store {
-    /// Construct a store rooted at `<base>/.kairn`.
+    /// Construct a store rooted at `<base>/.tidemark`.
     pub fn at(base: &Path) -> Self {
         Store {
-            root: base.join(".kairn"),
+            root: base.join(".tidemark"),
         }
     }
 
     /// Create the store directory. Idempotent: succeeds if it already exists.
-    pub fn init(&self) -> Result<(), KairnError> {
+    pub fn init(&self) -> Result<(), TidemarkError> {
         std::fs::create_dir_all(self.snap_dir())?;
         Ok(())
     }
@@ -39,14 +39,14 @@ impl Store {
         self.snap_dir().join(format!("{label}.json"))
     }
 
-    fn validate_label(label: &str) -> Result<(), KairnError> {
+    fn validate_label(label: &str) -> Result<(), TidemarkError> {
         if label.is_empty()
             || label.contains('/')
             || label.contains('\\')
             || label.contains("..")
             || label.chars().any(|c| c.is_control())
         {
-            return Err(KairnError::invalid(format!("invalid label: {label:?}")));
+            return Err(TidemarkError::invalid(format!("invalid label: {label:?}")));
         }
         Ok(())
     }
@@ -54,7 +54,7 @@ impl Store {
     /// Save a manifest under `label`. Idempotent: an identical tree is a no-op
     /// success. A different tree under an existing label returns `conflict`
     /// unless `force`.
-    pub fn save(&self, label: &str, m: &Manifest, force: bool) -> Result<(), KairnError> {
+    pub fn save(&self, label: &str, m: &Manifest, force: bool) -> Result<(), TidemarkError> {
         Self::validate_label(label)?;
         let path = self.path_for(label);
         if path.exists() && !force {
@@ -62,32 +62,32 @@ impl Store {
             if existing.tree_digest == m.tree_digest {
                 return Ok(());
             }
-            return Err(KairnError::conflict(format!(
+            return Err(TidemarkError::conflict(format!(
                 "label {label:?} exists with a different tree (use --force to overwrite)"
             )));
         }
         std::fs::create_dir_all(self.snap_dir())?;
-        let json = serde_json::to_string_pretty(m).map_err(|e| KairnError::io(e.to_string()))?;
+        let json = serde_json::to_string_pretty(m).map_err(|e| TidemarkError::io(e.to_string()))?;
         std::fs::write(&path, json)?;
         Ok(())
     }
 
     /// Load a manifest by label.
-    pub fn load_label(&self, label: &str) -> Result<Manifest, KairnError> {
+    pub fn load_label(&self, label: &str) -> Result<Manifest, TidemarkError> {
         Self::validate_label(label)?;
         let path = self.path_for(label);
         if !path.exists() {
-            return Err(KairnError::not_found(format!(
+            return Err(TidemarkError::not_found(format!(
                 "no snapshot labeled {label:?}"
             )));
         }
         let data = std::fs::read_to_string(&path)?;
         serde_json::from_str(&data)
-            .map_err(|e| KairnError::invalid(format!("corrupt manifest: {e}")))
+            .map_err(|e| TidemarkError::invalid(format!("corrupt manifest: {e}")))
     }
 
     /// List stored snapshots, oldest first.
-    pub fn list(&self) -> Result<Vec<StoreItem>, KairnError> {
+    pub fn list(&self) -> Result<Vec<StoreItem>, TidemarkError> {
         let dir = self.snap_dir();
         if !dir.exists() {
             return Ok(Vec::new());
@@ -118,16 +118,16 @@ impl Store {
     }
 
     /// Most recently created label, if any.
-    pub fn latest(&self) -> Result<Option<String>, KairnError> {
+    pub fn latest(&self) -> Result<Option<String>, TidemarkError> {
         Ok(self.list()?.into_iter().next_back().map(|i| i.label))
     }
 
     /// Remove a stored snapshot by label.
-    pub fn remove(&self, label: &str) -> Result<(), KairnError> {
+    pub fn remove(&self, label: &str) -> Result<(), TidemarkError> {
         Self::validate_label(label)?;
         let path = self.path_for(label);
         if !path.exists() {
-            return Err(KairnError::not_found(format!(
+            return Err(TidemarkError::not_found(format!(
                 "no snapshot labeled {label:?}"
             )));
         }
@@ -208,7 +208,7 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let s = Store::at(tmp.path());
         s.init().unwrap();
-        assert!(tmp.path().join(".kairn/snapshots").is_dir());
+        assert!(tmp.path().join(".tidemark/snapshots").is_dir());
         s.init().unwrap(); // second call must not error
     }
 

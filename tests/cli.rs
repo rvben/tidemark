@@ -2,8 +2,8 @@ use assert_cmd::Command;
 use predicates::prelude::*;
 use std::fs;
 
-fn kairn(dir: &std::path::Path) -> Command {
-    let mut c = Command::cargo_bin("kairn").unwrap();
+fn tidemark(dir: &std::path::Path) -> Command {
+    let mut c = Command::cargo_bin("tidemark").unwrap();
     c.current_dir(dir);
     c
 }
@@ -13,7 +13,7 @@ fn kairn(dir: &std::path::Path) -> Command {
 #[test]
 fn bare_invocation_defaults_to_list_json_when_piped() {
     let tmp = tempfile::tempdir().unwrap();
-    let out = kairn(tmp.path()).assert().success();
+    let out = tidemark(tmp.path()).assert().success();
     let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
     let v: serde_json::Value = serde_json::from_str(&stdout).unwrap();
     assert!(v["items"].is_array(), "bare invocation lists snapshots");
@@ -23,7 +23,7 @@ fn bare_invocation_defaults_to_list_json_when_piped() {
 #[test]
 fn json_flag_is_accepted_globally() {
     let tmp = tempfile::tempdir().unwrap();
-    let out = kairn(tmp.path()).arg("--json").assert().success();
+    let out = tidemark(tmp.path()).arg("--json").assert().success();
     let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
     serde_json::from_str::<serde_json::Value>(&stdout).expect("--json yields valid JSON");
 }
@@ -31,21 +31,21 @@ fn json_flag_is_accepted_globally() {
 #[test]
 fn quiet_flag_is_accepted() {
     let tmp = tempfile::tempdir().unwrap();
-    kairn(tmp.path()).arg("--quiet").assert().success();
+    tidemark(tmp.path()).arg("--quiet").assert().success();
 }
 
 #[test]
 fn global_bounded_flags_accepted_on_default_command() {
     let tmp = tempfile::tempdir().unwrap();
-    kairn(tmp.path())
+    tidemark(tmp.path())
         .args(["--output", "json", "--limit", "1"])
         .assert()
         .success();
-    kairn(tmp.path())
+    tidemark(tmp.path())
         .args(["--output", "json", "--offset", "0"])
         .assert()
         .success();
-    kairn(tmp.path())
+    tidemark(tmp.path())
         .args(["--output", "json", "--fields", "label"])
         .assert()
         .success();
@@ -54,13 +54,13 @@ fn global_bounded_flags_accepted_on_default_command() {
 #[test]
 fn yes_flag_is_global() {
     let tmp = tempfile::tempdir().unwrap();
-    kairn(tmp.path()).arg("--yes").assert().success();
+    tidemark(tmp.path()).arg("--yes").assert().success();
 }
 
 #[test]
 fn unknown_subcommand_emits_json_error_to_stderr() {
     let tmp = tempfile::tempdir().unwrap();
-    let out = kairn(tmp.path())
+    let out = tidemark(tmp.path())
         .args(["--output", "json", "definitely-not-a-real-subcommand-xyz"])
         .assert()
         .failure();
@@ -74,16 +74,16 @@ fn unknown_subcommand_emits_json_error_to_stderr() {
 #[test]
 fn init_creates_store_idempotently() {
     let tmp = tempfile::tempdir().unwrap();
-    kairn(tmp.path()).arg("init").assert().success();
-    assert!(tmp.path().join(".kairn").is_dir());
+    tidemark(tmp.path()).arg("init").assert().success();
+    assert!(tmp.path().join(".tidemark").is_dir());
     // running again is a success no-op
-    kairn(tmp.path()).arg("init").assert().success();
+    tidemark(tmp.path()).arg("init").assert().success();
 }
 
 #[test]
 fn help_lists_global_flags() {
     let tmp = tempfile::tempdir().unwrap();
-    kairn(tmp.path())
+    tidemark(tmp.path())
         .arg("--help")
         .assert()
         .success()
@@ -96,12 +96,12 @@ fn help_lists_global_flags() {
 fn snap_then_diff_reports_added_file() {
     let tmp = tempfile::tempdir().unwrap();
     fs::write(tmp.path().join("a.txt"), b"hello").unwrap();
-    kairn(tmp.path())
+    tidemark(tmp.path())
         .args(["snap", "before"])
         .assert()
         .success();
     fs::write(tmp.path().join("b.txt"), b"new").unwrap();
-    kairn(tmp.path())
+    tidemark(tmp.path())
         .args(["diff", "before", "--output", "json"])
         .assert()
         .success()
@@ -113,13 +113,13 @@ fn snap_then_diff_reports_added_file() {
 fn exit_code_flag_signals_changes() {
     let tmp = tempfile::tempdir().unwrap();
     fs::write(tmp.path().join("a.txt"), b"x").unwrap();
-    kairn(tmp.path()).args(["snap", "s"]).assert().success();
-    kairn(tmp.path())
+    tidemark(tmp.path()).args(["snap", "s"]).assert().success();
+    tidemark(tmp.path())
         .args(["diff", "s", "--exit-code"])
         .assert()
         .code(0);
     fs::write(tmp.path().join("a.txt"), b"changed").unwrap();
-    kairn(tmp.path())
+    tidemark(tmp.path())
         .args(["diff", "s", "--exit-code"])
         .assert()
         .code(1);
@@ -129,17 +129,17 @@ fn exit_code_flag_signals_changes() {
 fn idempotent_snap_same_tree() {
     let tmp = tempfile::tempdir().unwrap();
     fs::write(tmp.path().join("a.txt"), b"x").unwrap();
-    kairn(tmp.path()).args(["snap", "s"]).assert().success();
-    kairn(tmp.path()).args(["snap", "s"]).assert().success();
+    tidemark(tmp.path()).args(["snap", "s"]).assert().success();
+    tidemark(tmp.path()).args(["snap", "s"]).assert().success();
 }
 
 #[test]
 fn conflict_on_label_reuse_with_changes() {
     let tmp = tempfile::tempdir().unwrap();
     fs::write(tmp.path().join("a.txt"), b"x").unwrap();
-    kairn(tmp.path()).args(["snap", "s"]).assert().success();
+    tidemark(tmp.path()).args(["snap", "s"]).assert().success();
     fs::write(tmp.path().join("a.txt"), b"y").unwrap();
-    kairn(tmp.path())
+    tidemark(tmp.path())
         .args(["snap", "s"])
         .assert()
         .failure()
@@ -150,11 +150,11 @@ fn conflict_on_label_reuse_with_changes() {
 #[test]
 fn schema_is_valid_json_with_tool_name() {
     let tmp = tempfile::tempdir().unwrap();
-    let out = kairn(tmp.path()).args(["schema"]).assert().success();
+    let out = tidemark(tmp.path()).args(["schema"]).assert().success();
     let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
     let v: serde_json::Value = serde_json::from_str(&stdout).unwrap();
     // Canonical clispec shape: top-level name + version + commands array.
-    assert_eq!(v["name"], "kairn");
+    assert_eq!(v["name"], "tidemark");
     assert_eq!(v["clispec"], "0.1");
     assert!(v["version"].is_string());
     assert!(v["commands"].is_array());
@@ -174,13 +174,13 @@ fn schema_is_valid_json_with_tool_name() {
 fn rm_requires_yes_when_noninteractive() {
     let tmp = tempfile::tempdir().unwrap();
     fs::write(tmp.path().join("a.txt"), b"x").unwrap();
-    kairn(tmp.path()).args(["snap", "s"]).assert().success();
-    kairn(tmp.path())
+    tidemark(tmp.path()).args(["snap", "s"]).assert().success();
+    tidemark(tmp.path())
         .args(["rm", "s"])
         .assert()
         .failure()
         .code(2);
-    kairn(tmp.path())
+    tidemark(tmp.path())
         .args(["rm", "s", "--yes"])
         .assert()
         .success();
@@ -190,8 +190,8 @@ fn rm_requires_yes_when_noninteractive() {
 fn list_uses_envelope_when_piped() {
     let tmp = tempfile::tempdir().unwrap();
     fs::write(tmp.path().join("a.txt"), b"x").unwrap();
-    kairn(tmp.path()).args(["snap", "s"]).assert().success();
-    kairn(tmp.path())
+    tidemark(tmp.path()).args(["snap", "s"]).assert().success();
+    tidemark(tmp.path())
         .args(["list"])
         .assert()
         .success()
@@ -202,11 +202,14 @@ fn list_uses_envelope_when_piped() {
 #[test]
 fn diff_pagination_limits_changes() {
     let tmp = tempfile::tempdir().unwrap();
-    kairn(tmp.path()).args(["snap", "empty"]).assert().success();
+    tidemark(tmp.path())
+        .args(["snap", "empty"])
+        .assert()
+        .success();
     for i in 0..5 {
         fs::write(tmp.path().join(format!("f{i}.txt")), b"x").unwrap();
     }
-    let out = kairn(tmp.path())
+    let out = tidemark(tmp.path())
         .args(["diff", "empty", "--limit", "2", "--output", "json"])
         .assert()
         .success();
@@ -220,7 +223,7 @@ fn diff_pagination_limits_changes() {
 fn snap_to_stdout_when_output_dash() {
     let tmp = tempfile::tempdir().unwrap();
     fs::write(tmp.path().join("a.txt"), b"x").unwrap();
-    let out = kairn(tmp.path())
+    let out = tidemark(tmp.path())
         .args(["snap", "--output-file", "-"])
         .assert()
         .success();
@@ -237,18 +240,18 @@ fn content_diff_works_between_two_stored_manifests() {
     // without the live tree. This locks in that property.
     let tmp = tempfile::tempdir().unwrap();
     fs::write(tmp.path().join("a.txt"), b"alpha\nbeta\ngamma\n").unwrap();
-    let before = tmp.path().join("before.kairn");
-    kairn(tmp.path())
+    let before = tmp.path().join("before.tidemark");
+    tidemark(tmp.path())
         .args(["snap", "--output-file", before.to_str().unwrap()])
         .assert()
         .success();
     fs::write(tmp.path().join("a.txt"), b"alpha\nBETA\ngamma\n").unwrap();
-    let after = tmp.path().join("after.kairn");
-    kairn(tmp.path())
+    let after = tmp.path().join("after.tidemark");
+    tidemark(tmp.path())
         .args(["snap", "--output-file", after.to_str().unwrap()])
         .assert()
         .success();
-    let out = kairn(tmp.path())
+    let out = tidemark(tmp.path())
         .args([
             "diff",
             before.to_str().unwrap(),
@@ -272,10 +275,13 @@ fn content_diff_works_between_two_stored_manifests() {
 fn diff_only_filters_change_kinds() {
     let tmp = tempfile::tempdir().unwrap();
     fs::write(tmp.path().join("keep.txt"), b"x").unwrap();
-    kairn(tmp.path()).args(["snap", "base"]).assert().success();
+    tidemark(tmp.path())
+        .args(["snap", "base"])
+        .assert()
+        .success();
     fs::write(tmp.path().join("added.txt"), b"y").unwrap();
     fs::write(tmp.path().join("keep.txt"), b"changed").unwrap();
-    let out = kairn(tmp.path())
+    let out = tidemark(tmp.path())
         .args(["diff", "base", "--only", "added", "--output", "json"])
         .assert()
         .success();
@@ -290,9 +296,12 @@ fn diff_only_filters_change_kinds() {
 fn content_diff_shows_unified_lines() {
     let tmp = tempfile::tempdir().unwrap();
     fs::write(tmp.path().join("a.txt"), b"one\ntwo\nthree\n").unwrap();
-    kairn(tmp.path()).args(["snap", "base"]).assert().success();
+    tidemark(tmp.path())
+        .args(["snap", "base"])
+        .assert()
+        .success();
     fs::write(tmp.path().join("a.txt"), b"one\nTWO\nthree\n").unwrap();
-    let out = kairn(tmp.path())
+    let out = tidemark(tmp.path())
         .args(["diff", "base", "--content", "--output", "json"])
         .assert()
         .success();
@@ -312,7 +321,7 @@ fn content_diff_shows_unified_lines() {
 #[test]
 fn error_output_has_retryable_field() {
     let tmp = tempfile::tempdir().unwrap();
-    kairn(tmp.path())
+    tidemark(tmp.path())
         .args(["show", "nonexistent-label"])
         .assert()
         .failure()

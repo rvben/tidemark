@@ -2,7 +2,7 @@
 //! a manifest file path, or a store label.
 
 use crate::builder::SnapOptions;
-use crate::error::KairnError;
+use crate::error::TidemarkError;
 use crate::manifest::Manifest;
 use crate::store::Store;
 use std::path::Path;
@@ -20,7 +20,7 @@ pub fn resolve(
     base: &Path,
     store: &Store,
     snap_opts: &SnapOptions,
-) -> Result<Manifest, KairnError> {
+) -> Result<Manifest, TidemarkError> {
     if r == "@" {
         return crate::builder::build_manifest(base, snap_opts);
     }
@@ -40,11 +40,11 @@ pub fn resolve(
     }
 }
 
-fn load_manifest_file(path: &str) -> Result<Manifest, KairnError> {
+fn load_manifest_file(path: &str) -> Result<Manifest, TidemarkError> {
     let data = std::fs::read_to_string(path)
-        .map_err(|_| KairnError::not_found(format!("no such manifest file or label: {path}")))?;
+        .map_err(|_| TidemarkError::not_found(format!("no such manifest file or label: {path}")))?;
     serde_json::from_str(&data)
-        .map_err(|e| KairnError::invalid(format!("corrupt manifest {path}: {e}")))
+        .map_err(|e| TidemarkError::invalid(format!("corrupt manifest {path}: {e}")))
 }
 
 #[cfg(test)]
@@ -97,7 +97,7 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         fs::write(tmp.path().join("a.txt"), b"hi").unwrap();
         let snap = crate::builder::build_manifest(tmp.path(), &SnapOptions::default()).unwrap();
-        let mpath = tmp.path().join("snap.kairn");
+        let mpath = tmp.path().join("snap.tidemark");
         fs::write(&mpath, serde_json::to_string(&snap).unwrap()).unwrap();
         let store = Store::at(tmp.path());
         let m = resolve(

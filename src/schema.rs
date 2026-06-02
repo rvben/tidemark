@@ -1,15 +1,15 @@
-//! The clispec v0.1 schema document for kairn.
+//! The clispec v0.1 schema document for tidemark.
 
 use serde_json::{Value, json};
 
-/// Build the clispec v0.1 schema describing kairn's commands, args, output, and
+/// Build the clispec v0.1 schema describing tidemark's commands, args, output, and
 /// errors. The shape matches `clispec.dev/schema/v0.1.json`: top-level `name`,
 /// `version`, `commands`, and `errors`; each command carries a `mutating` marker
 /// and `output_fields`.
 pub fn schema() -> Value {
     json!({
         "clispec": "0.1",
-        "name": "kairn",
+        "name": "tidemark",
         "version": env!("CARGO_PKG_VERSION"),
         "description": "Snapshot a directory tree and diff what changed - no git required.",
         "errors": [
@@ -139,7 +139,7 @@ mod tests {
     fn schema_has_required_top_level_keys() {
         let s = schema();
         assert_eq!(s["clispec"], "0.1");
-        assert_eq!(s["name"], "kairn");
+        assert_eq!(s["name"], "tidemark");
         assert!(s["version"].is_string());
         assert!(s["commands"].as_array().unwrap().len() >= 6);
     }

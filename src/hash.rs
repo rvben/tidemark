@@ -1,6 +1,6 @@
 //! Content hashing (blake3) and symlink target capture.
 
-use crate::error::{ErrorKind, KairnError};
+use crate::error::{ErrorKind, TidemarkError};
 use std::path::Path;
 
 /// Hash a byte slice, returning `"blake3:<hex>"`.
@@ -9,13 +9,13 @@ pub fn hash_bytes(bytes: &[u8]) -> String {
 }
 
 /// Read a symlink's target as a UTF-8 string.
-pub fn read_link(path: &Path) -> Result<String, KairnError> {
+pub fn read_link(path: &Path) -> Result<String, TidemarkError> {
     let target = std::fs::read_link(path)?;
     target
         .to_str()
         .map(|s| s.replace('\\', "/"))
         .ok_or_else(|| {
-            KairnError::new(
+            TidemarkError::new(
                 ErrorKind::Unsupported,
                 "non-UTF-8 symlink target".to_string(),
             )

@@ -5,7 +5,7 @@ use std::io::{IsTerminal, Write};
 use std::path::PathBuf;
 
 use crate::builder::SnapOptions;
-use crate::error::KairnError;
+use crate::error::TidemarkError;
 use crate::manifest::Manifest;
 use crate::output::{self, Format};
 use crate::store::Store;
@@ -13,7 +13,7 @@ use crate::walk::WalkOptions;
 
 #[derive(Parser)]
 #[command(
-    name = "kairn",
+    name = "tidemark",
     version,
     about = "Snapshot a directory tree and diff what changed - no git required."
 )]
@@ -195,14 +195,14 @@ fn handle_parse_error(e: clap::Error) -> i32 {
     }
 }
 
-fn emit_error(e: &KairnError) {
+fn emit_error(e: &TidemarkError) {
     let payload = serde_json::json!({
         "error": { "kind": e.kind, "message": e.message, "retryable": e.kind.retryable() }
     });
     eprintln!("{payload}");
 }
 
-fn dispatch(cmd: Command, ctx: &Ctx) -> Result<i32, KairnError> {
+fn dispatch(cmd: Command, ctx: &Ctx) -> Result<i32, TidemarkError> {
     match cmd {
         Command::Schema => {
             print_json(&crate::schema::schema());
@@ -242,13 +242,13 @@ fn dispatch(cmd: Command, ctx: &Ctx) -> Result<i32, KairnError> {
     }
 }
 
-fn cmd_init(path: &std::path::Path, ctx: &Ctx) -> Result<i32, KairnError> {
+fn cmd_init(path: &std::path::Path, ctx: &Ctx) -> Result<i32, TidemarkError> {
     let store = Store::at(path);
     store.init()?;
-    let payload = serde_json::json!({ "initialized": true, "path": ".kairn" });
+    let payload = serde_json::json!({ "initialized": true, "path": ".tidemark" });
     match ctx.fmt {
         Format::Json => print_json(&payload),
-        Format::Table => println!("initialized store at .kairn"),
+        Format::Table => println!("initialized store at .tidemark"),
     }
     Ok(0)
 }
@@ -264,7 +264,7 @@ fn cmd_snap(
     no_content: bool,
     force: bool,
     ctx: &Ctx,
-) -> Result<i32, KairnError> {
+) -> Result<i32, TidemarkError> {
     let opts = snap_opts(hidden, no_ignore, ignore, !no_content);
     let manifest = crate::builder::build_manifest(&path, &opts)?;
     let mut created = false;
@@ -277,8 +277,8 @@ fn cmd_snap(
 
     let mut wrote_manifest_to_stdout = false;
     if let Some(out) = &output_file {
-        let json =
-            serde_json::to_string_pretty(&manifest).map_err(|e| KairnError::io(e.to_string()))?;
+        let json = serde_json::to_string_pretty(&manifest)
+            .map_err(|e| TidemarkError::io(e.to_string()))?;
         if out.as_os_str() == "-" {
             println!("{json}");
             wrote_manifest_to_stdout = true;
@@ -327,7 +327,7 @@ fn cmd_diff(
     only: Vec<ChangeKindArg>,
     exit_code: bool,
     ctx: &Ctx,
-) -> Result<i32, KairnError> {
+) -> Result<i32, TidemarkError> {
     let base = PathBuf::from(".");
     let store = Store::at(&base);
     let sopts = SnapOptions::default();
@@ -375,7 +375,7 @@ fn cmd_diff(
     }
 }
 
-fn cmd_list(ctx: &Ctx) -> Result<i32, KairnError> {
+fn cmd_list(ctx: &Ctx) -> Result<i32, TidemarkError> {
     let store = Store::at(&PathBuf::from("."));
     let items = store.list()?;
     let values: Vec<serde_json::Value> = items
@@ -403,7 +403,7 @@ fn cmd_list(ctx: &Ctx) -> Result<i32, KairnError> {
     Ok(0)
 }
 
-fn cmd_show(reference: String) -> Result<i32, KairnError> {
+fn cmd_show(reference: String) -> Result<i32, TidemarkError> {
     let base = PathBuf::from(".");
     let store = Store::at(&base);
     let m = crate::refs::resolve(&reference, &base, &store, &SnapOptions::default())?;
@@ -411,12 +411,12 @@ fn cmd_show(reference: String) -> Result<i32, KairnError> {
     Ok(0)
 }
 
-fn cmd_rm(labels: Vec<String>, ctx: &Ctx) -> Result<i32, KairnError> {
+fn cmd_rm(labels: Vec<String>, ctx: &Ctx) -> Result<i32, TidemarkError> {
     if labels.is_empty() {
-        return Err(KairnError::invalid("no labels given"));
+        return Err(TidemarkError::invalid("no labels given"));
     }
     if !ctx.yes && !std::io::stdin().is_terminal() {
-        return Err(KairnError::invalid(
+        return Err(TidemarkError::invalid(
             "refusing to delete without --yes in non-interactive mode",
         ));
     }
@@ -445,11 +445,11 @@ fn resolve_diff_refs(
     a: Option<String>,
     b: Option<String>,
     store: &Store,
-) -> Result<(String, String), KairnError> {
+) -> Result<(String, String), TidemarkError> {
     match (a, b) {
         (None, _) => {
             let latest = store.latest()?.ok_or_else(|| {
-                KairnError::not_found("no stored snapshots; run `kairn snap <label>` first")
+                TidemarkError::not_found("no stored snapshots; run `tidemark snap <label>` first")
             })?;
             Ok((latest, "@".to_string()))
         }

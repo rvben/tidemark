@@ -1,13 +1,13 @@
-//! Directory traversal with .gitignore/.kairnignore support.
+//! Directory traversal with .gitignore/.tidemarkignore support.
 
-use crate::error::{ErrorKind, KairnError};
+use crate::error::{ErrorKind, TidemarkError};
 use std::path::{Path, PathBuf};
 
 /// Options controlling how the tree is walked.
 pub struct WalkOptions {
     /// Include dotfiles.
     pub hidden: bool,
-    /// Honor .gitignore/.kairnignore files.
+    /// Honor .gitignore/.tidemarkignore files.
     pub use_ignore: bool,
     /// Additional globs to exclude.
     pub extra_ignores: Vec<String>,
@@ -30,7 +30,7 @@ pub struct RawEntry {
 }
 
 /// Walk `root`, returning files and symlinks (not directories) as relative paths.
-pub fn walk_tree(root: &Path, opts: &WalkOptions) -> Result<Vec<RawEntry>, KairnError> {
+pub fn walk_tree(root: &Path, opts: &WalkOptions) -> Result<Vec<RawEntry>, TidemarkError> {
     use ignore::WalkBuilder;
     let mut builder = WalkBuilder::new(root);
     builder
@@ -41,7 +41,7 @@ pub fn walk_tree(root: &Path, opts: &WalkOptions) -> Result<Vec<RawEntry>, Kairn
         .ignore(opts.use_ignore)
         .parents(opts.use_ignore)
         .require_git(false)
-        .add_custom_ignore_filename(".kairnignore")
+        .add_custom_ignore_filename(".tidemarkignore")
         .follow_links(false);
 
     if !opts.extra_ignores.is_empty() {
@@ -49,15 +49,17 @@ pub fn walk_tree(root: &Path, opts: &WalkOptions) -> Result<Vec<RawEntry>, Kairn
         for g in &opts.extra_ignores {
             // An override entry beginning with '!' marks a glob as ignored.
             ov.add(&format!("!{g}"))
-                .map_err(|e| KairnError::invalid(e.to_string()))?;
+                .map_err(|e| TidemarkError::invalid(e.to_string()))?;
         }
-        let ov = ov.build().map_err(|e| KairnError::invalid(e.to_string()))?;
+        let ov = ov
+            .build()
+            .map_err(|e| TidemarkError::invalid(e.to_string()))?;
         builder.overrides(ov);
     }
 
     let mut out = Vec::new();
     for result in builder.build() {
-        let dent = result.map_err(|e| KairnError::io(e.to_string()))?;
+        let dent = result.map_err(|e| TidemarkError::io(e.to_string()))?;
         let path = dent.path();
         if path == root {
             continue;
@@ -71,16 +73,16 @@ pub fn walk_tree(root: &Path, opts: &WalkOptions) -> Result<Vec<RawEntry>, Kairn
         }
         let rel = path
             .strip_prefix(root)
-            .map_err(|e| KairnError::io(e.to_string()))?;
+            .map_err(|e| TidemarkError::io(e.to_string()))?;
         let rel = rel.to_str().ok_or_else(|| {
-            KairnError::new(
+            TidemarkError::new(
                 ErrorKind::Unsupported,
                 format!("non-UTF-8 path: {}", rel.display()),
             )
         })?;
         let rel = rel.replace('\\', "/");
-        // kairn never records its own store, even when --hidden is set.
-        if rel == ".kairn" || rel.starts_with(".kairn/") {
+        // tidemark never records its own store, even when --hidden is set.
+        if rel == ".tidemark" || rel.starts_with(".tidemark/") {
             continue;
         }
         out.push(RawEntry {
@@ -137,8 +139,8 @@ mod tests {
     #[test]
     fn always_excludes_own_store_even_when_hidden() {
         let tmp = tempfile::tempdir().unwrap();
-        fs::create_dir_all(tmp.path().join(".kairn/snapshots")).unwrap();
-        fs::write(tmp.path().join(".kairn/snapshots/x.json"), b"{}").unwrap();
+        fs::create_dir_all(tmp.path().join(".tidemark/snapshots")).unwrap();
+        fs::write(tmp.path().join(".tidemark/snapshots/x.json"), b"{}").unwrap();
         fs::write(tmp.path().join("real.txt"), b"x").unwrap();
         let opts = WalkOptions {
             hidden: true,

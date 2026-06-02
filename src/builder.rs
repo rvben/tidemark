@@ -1,6 +1,6 @@
 //! Compose walk + hash into a Manifest.
 
-use crate::error::KairnError;
+use crate::error::TidemarkError;
 use crate::manifest::{Entry, EntryKind, Manifest};
 use crate::walk::{WalkOptions, walk_tree};
 use std::path::Path;
@@ -30,9 +30,9 @@ fn now_rfc3339() -> String {
 }
 
 /// Build a manifest of `root` applying `opts`.
-pub fn build_manifest(root: &Path, opts: &SnapOptions) -> Result<Manifest, KairnError> {
+pub fn build_manifest(root: &Path, opts: &SnapOptions) -> Result<Manifest, TidemarkError> {
     let canon = std::fs::canonicalize(root)
-        .map_err(|_| KairnError::not_found(format!("path not found: {}", root.display())))?;
+        .map_err(|_| TidemarkError::not_found(format!("path not found: {}", root.display())))?;
     let raw = walk_tree(&canon, &opts.walk)?;
     let mut entries = Vec::with_capacity(raw.len());
     for r in raw {
@@ -48,7 +48,7 @@ pub fn build_manifest(root: &Path, opts: &SnapOptions) -> Result<Manifest, Kairn
 
 /// Build a single manifest entry for `abs` (recorded as `rel`). Returns
 /// `Ok(None)` if the path no longer exists (a benign mid-snapshot deletion).
-fn entry_for(rel: &str, abs: &Path, store_content: bool) -> Result<Option<Entry>, KairnError> {
+fn entry_for(rel: &str, abs: &Path, store_content: bool) -> Result<Option<Entry>, TidemarkError> {
     let meta = match std::fs::symlink_metadata(abs) {
         Ok(m) => m,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),

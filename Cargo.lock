@@ -447,24 +447,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "kairn"
-version = "0.1.0"
-dependencies = [
- "assert_cmd",
- "blake3",
- "clap",
- "ignore",
- "insta",
- "jiff",
- "owo-colors",
- "predicates",
- "serde",
- "serde_json",
- "similar",
- "tempfile",
-]
-
-[[package]]
 name = "leb128fmt"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -753,6 +735,24 @@ name = "termtree"
 version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8f50febec83f5ee1df3015341d8bd429f2d1cc62bcba7ea2076759d315084683"
+
+[[package]]
+name = "tidemark"
+version = "0.1.0"
+dependencies = [
+ "assert_cmd",
+ "blake3",
+ "clap",
+ "ignore",
+ "insta",
+ "jiff",
+ "owo-colors",
+ "predicates",
+ "serde",
+ "serde_json",
+ "similar",
+ "tempfile",
+]
 
 [[package]]
 name = "unicode-ident"

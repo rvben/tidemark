@@ -19,7 +19,7 @@ clippy:
 lint: fmt-check clippy
 
 score: build
-	clispec score ./target/release/kairn
+	clispec score ./target/release/tidemark
 
 check: lint test
 

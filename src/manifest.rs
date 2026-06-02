@@ -37,7 +37,7 @@ pub struct Entry {
 /// A deterministic snapshot of a directory tree.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Manifest {
-    pub kairn_version: String,
+    pub tidemark_version: String,
     pub manifest_version: u32,
     pub root: String,
     pub created_at: String,
@@ -54,7 +54,7 @@ impl Manifest {
         let tree_digest = compute_tree_digest(&entries);
         let entry_count = entries.len();
         Manifest {
-            kairn_version: env!("CARGO_PKG_VERSION").to_string(),
+            tidemark_version: env!("CARGO_PKG_VERSION").to_string(),
             manifest_version: MANIFEST_VERSION,
             root,
             created_at,
