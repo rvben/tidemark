@@ -53,6 +53,10 @@ jobs:
     # workflow_dispatch). Fork PRs must never dispatch jobs to self-hosted.
     if: github.event_name != 'pull_request'
     strategy:
+      # Run every target to completion so a single platform failure surfaces
+      # all per-platform issues in one run instead of one tag at a time. The
+      # release job still requires the whole build job to succeed.
+      fail-fast: false
       matrix:
         include:
           - os: ubuntu-latest
@@ -114,9 +118,11 @@ jobs:
         shell: bash
         run: |
           uv venv "${RUNNER_TEMP}/build-venv"
+          # Pass the venv directory (not an interpreter path) so uv resolves
+          # bin/python on Unix and Scripts/python.exe on Windows itself.
+          uv pip install --python "${RUNNER_TEMP}/build-venv" maturin ziglang
           VENV_BIN="${RUNNER_TEMP}/build-venv/bin"
           [ -d "$VENV_BIN" ] || VENV_BIN="${RUNNER_TEMP}/build-venv/Scripts"
-          uv pip install --python "$VENV_BIN/python" maturin ziglang
           echo "$VENV_BIN" >> "$GITHUB_PATH"
 
       - name: Build wheel (arm64 linux via maturin-action)
