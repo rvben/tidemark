@@ -1,4 +1,4 @@
-.PHONY: build test lint fmt fmt-check clippy score check ci install
+.PHONY: build test lint fmt fmt-check clippy score check ci install release-patch release-minor release-major
 
 build:
 	cargo build --release
@@ -27,3 +27,12 @@ ci: check score
 
 install:
 	cargo install --path .
+
+release-patch:
+	vership bump patch
+
+release-minor:
+	vership bump minor
+
+release-major:
+	vership bump major

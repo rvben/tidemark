@@ -2,11 +2,19 @@
 name = "tidemark"
 version = "0.1.0"
 edition = "2024"
+rust-version = "1.90"
 description = "Snapshot a directory tree and diff what changed - no git required. Built for humans and agents."
 license = "MIT"
 repository = "https://github.com/rvben/tidemark"
+homepage = "https://github.com/rvben/tidemark"
 keywords = ["filesystem", "diff", "snapshot", "cli", "agent"]
 categories = ["command-line-utilities", "filesystem"]
+default-run = "tidemark"
+exclude = ["docs/", "CLAUDE.local.md"]
+
+[[bin]]
+name = "tidemark"
+path = "src/main.rs"
 
 [dependencies]
 clap = { version = "4", features = ["derive"] }

@@ -1,1 +1,5 @@
 /target
+/CLAUDE.local.md
+/dist
+/target-host
+*.whl
