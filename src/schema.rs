@@ -1,23 +1,75 @@
-//! The clispec v0.1 schema document for tidemark.
+//! The clispec v0.2 schema document for tidemark.
 
 use serde_json::{Value, json};
 
-/// Build the clispec v0.1 schema describing tidemark's commands, args, output, and
-/// errors. The shape matches `clispec.dev/schema/v0.1.json`: top-level `name`,
-/// `version`, `commands`, and `errors`; each command carries a `mutating` marker
-/// and `output_fields`.
+/// Build the clispec v0.2 schema describing tidemark's commands, args, output, and
+/// errors. The shape matches `clispec.dev/schema/v0.2.json`: top-level `name`,
+/// `version`, `global_args`, `commands`, and `errors`; each error carries `exit_code`
+/// and `retryable`; each command carries a `mutating` marker and `output_fields`.
 pub fn schema() -> Value {
     json!({
-        "clispec": "0.1",
+        "clispec": "0.2",
         "name": "tidemark",
         "version": env!("CARGO_PKG_VERSION"),
         "description": "Snapshot a directory tree and diff what changed - no git required.",
+        "global_args": [
+            {
+                "name": "--output",
+                "type": "string",
+                "enum": ["auto", "json", "table", "text"],
+                "default": "auto",
+                "description": "Output format. auto detects the TTY; an explicit value always wins."
+            },
+            {
+                "name": "-o",
+                "type": "string",
+                "enum": ["auto", "json", "table", "text"],
+                "default": "auto",
+                "description": "Shorthand for --output."
+            },
+            {
+                "name": "--json",
+                "type": "boolean",
+                "default": false,
+                "description": "Shorthand for --output json."
+            },
+            {
+                "name": "--quiet",
+                "type": "boolean",
+                "default": false,
+                "description": "Suppress diagnostics on stderr."
+            },
+            {
+                "name": "--yes",
+                "type": "boolean",
+                "default": false,
+                "description": "Assume yes for destructive prompts (required to delete non-interactively)."
+            },
+            {
+                "name": "--limit",
+                "type": "integer",
+                "required": false,
+                "description": "Limit the number of items in list/diff output."
+            },
+            {
+                "name": "--offset",
+                "type": "integer",
+                "default": 0,
+                "description": "Skip this many items in list/diff output."
+            },
+            {
+                "name": "--fields",
+                "type": "string[]",
+                "required": false,
+                "description": "Restrict output objects to these fields (comma-separated)."
+            }
+        ],
         "errors": [
-            {"kind": "not_found", "retryable": false, "description": "A label, manifest file, or path does not exist."},
-            {"kind": "conflict", "retryable": false, "description": "A label exists with a different tree (use --force to overwrite)."},
-            {"kind": "invalid_input", "retryable": false, "description": "A ref, glob, label, or manifest was malformed."},
-            {"kind": "io", "retryable": true, "description": "A filesystem operation failed; retrying may succeed."},
-            {"kind": "unsupported", "retryable": false, "description": "An input could not be represented (e.g. a non-UTF-8 path)."}
+            {"kind": "not_found", "exit_code": 4, "retryable": false, "description": "A label, manifest file, or path does not exist."},
+            {"kind": "conflict", "exit_code": 5, "retryable": false, "description": "A label exists with a different tree (use --force to overwrite)."},
+            {"kind": "invalid_input", "exit_code": 2, "retryable": false, "description": "A ref, glob, label, or manifest was malformed."},
+            {"kind": "io", "exit_code": 3, "retryable": true, "description": "A filesystem operation failed; retrying may succeed."},
+            {"kind": "unsupported", "exit_code": 6, "retryable": false, "description": "An input could not be represented (e.g. a non-UTF-8 path)."}
         ],
         "exit_codes": {
             "default": {"0": "success", "2": "error"},
@@ -138,10 +190,52 @@ mod tests {
     #[test]
     fn schema_has_required_top_level_keys() {
         let s = schema();
-        assert_eq!(s["clispec"], "0.1");
+        assert_eq!(s["clispec"], "0.2");
         assert_eq!(s["name"], "tidemark");
         assert!(s["version"].is_string());
         assert!(s["commands"].as_array().unwrap().len() >= 6);
+    }
+
+    #[test]
+    fn schema_declares_global_args() {
+        let s = schema();
+        let global_args = s["global_args"]
+            .as_array()
+            .expect("global_args must be present");
+        assert!(!global_args.is_empty(), "global_args must not be empty");
+        // --output must be declared with auto default
+        let output_arg = global_args
+            .iter()
+            .find(|a| a["name"] == "--output")
+            .expect("--output must be in global_args");
+        assert_eq!(
+            output_arg["default"], "auto",
+            "--output default must be auto"
+        );
+        let enums = output_arg["enum"]
+            .as_array()
+            .expect("--output must have enum");
+        assert!(enums.iter().any(|e| e == "auto"), "enum must include auto");
+        assert!(enums.iter().any(|e| e == "json"), "enum must include json");
+        assert!(enums.iter().any(|e| e == "text"), "enum must include text");
+    }
+
+    #[test]
+    fn error_kinds_have_exit_code() {
+        let s = schema();
+        let errors = s["errors"].as_array().expect("top-level errors array");
+        for e in errors {
+            let kind = e["kind"].as_str().unwrap();
+            assert!(
+                e["exit_code"].is_number(),
+                "error kind {kind:?} missing exit_code"
+            );
+            let code = e["exit_code"].as_u64().unwrap();
+            assert!(
+                (1..=255).contains(&code),
+                "exit_code for {kind:?} must be 1-255"
+            );
+        }
     }
 
     #[test]

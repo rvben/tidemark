@@ -18,9 +18,9 @@ use crate::walk::WalkOptions;
     about = "Snapshot a directory tree and diff what changed - no git required."
 )]
 struct Cli {
-    /// Output format. Defaults to json when piped, table on a terminal.
-    #[arg(long, global = true, value_enum)]
-    output: Option<FormatArg>,
+    /// Output format: auto (default - json when piped, table on a terminal), json, table, text.
+    #[arg(short = 'o', long, global = true, value_enum, default_value_t = FormatArg::Auto)]
+    output: FormatArg,
     /// Shorthand for `--output json`.
     #[arg(long, global = true)]
     json: bool,
@@ -43,16 +43,25 @@ struct Cli {
     command: Option<Command>,
 }
 
-#[derive(Copy, Clone, ValueEnum)]
+/// The format argument accepted by --output / -o.
+///
+/// `Auto` is the default: json when piped, table on a terminal. Explicit values
+/// always win over TTY detection, satisfying the clispec "explicit format wins" rule.
+/// `Text` is an alias for `Table` (human-readable rows without JSON).
+#[derive(Copy, Clone, PartialEq, Eq, ValueEnum, Default)]
 enum FormatArg {
+    #[default]
+    Auto,
     Json,
     Table,
+    Text,
 }
-impl From<FormatArg> for Format {
+impl From<FormatArg> for Option<Format> {
     fn from(f: FormatArg) -> Self {
         match f {
-            FormatArg::Json => Format::Json,
-            FormatArg::Table => Format::Table,
+            FormatArg::Auto => None,
+            FormatArg::Json => Some(Format::Json),
+            FormatArg::Table | FormatArg::Text => Some(Format::Table),
         }
     }
 }
@@ -64,7 +73,7 @@ enum Command {
         label: Option<String>,
         #[arg(long, default_value = ".")]
         path: PathBuf,
-        #[arg(long = "output-file", short = 'o')]
+        #[arg(long = "output-file")]
         output_file: Option<PathBuf>,
         #[arg(long)]
         ignore: Vec<String>,
@@ -148,7 +157,8 @@ pub fn run() -> i32 {
     let fmt = if cli.json {
         Format::Json
     } else {
-        output::resolve_format(cli.output.map(Into::into), stdout_is_tty)
+        let explicit: Option<Format> = cli.output.into();
+        output::resolve_format(explicit, stdout_is_tty)
     };
     let ctx = Ctx {
         fmt,
@@ -390,9 +400,10 @@ fn cmd_list(ctx: &Ctx) -> Result<i32, TidemarkError> {
             print_json(&env);
         }
         Format::Table => {
+            println!("{:<24}\t{:<30}\tENTRIES", "LABEL", "CREATED");
             for it in &page {
                 println!(
-                    "{}\t{}\t{} entries",
+                    "{:<24}\t{:<30}\t{}",
                     it.get("label").and_then(|v| v.as_str()).unwrap_or(""),
                     it.get("created_at").and_then(|v| v.as_str()).unwrap_or(""),
                     it.get("entry_count").and_then(|v| v.as_u64()).unwrap_or(0)

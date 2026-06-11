@@ -155,7 +155,7 @@ fn schema_is_valid_json_with_tool_name() {
     let v: serde_json::Value = serde_json::from_str(&stdout).unwrap();
     // Canonical clispec shape: top-level name + version + commands array.
     assert_eq!(v["name"], "tidemark");
-    assert_eq!(v["clispec"], "0.1");
+    assert_eq!(v["clispec"], "0.2");
     assert!(v["version"].is_string());
     assert!(v["commands"].is_array());
     // list precedes diff so the scorer probes the always-succeeding list command.
@@ -328,4 +328,85 @@ fn error_output_has_retryable_field() {
         .code(2)
         .stderr(predicate::str::contains("\"retryable\""))
         .stderr(predicate::str::contains("\"kind\":\"not_found\""));
+}
+
+// --- clispec v0.2 conformance tests ---
+
+/// The schema output must validate against the vendored clispec v0.2 JSON Schema.
+/// This exercises the production `schema` command, not a hand-rolled re-implementation.
+#[test]
+fn schema_validates_against_clispec_v0_2() {
+    let schema_fixture = include_str!("fixtures/clispec-v0.2.json");
+    let meta_schema: serde_json::Value =
+        serde_json::from_str(schema_fixture).expect("fixture must be valid JSON");
+
+    let tmp = tempfile::tempdir().unwrap();
+    let out = tidemark(tmp.path()).args(["schema"]).assert().success();
+    let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
+    let tool_schema: serde_json::Value =
+        serde_json::from_str(&stdout).expect("schema output must be valid JSON");
+
+    assert!(
+        jsonschema::is_valid(&meta_schema, &tool_schema),
+        "schema output does not validate against clispec v0.2. Output was:\n{tool_schema:#}"
+    );
+}
+
+/// Explicit -o text must produce text output even when stdout is piped (not a TTY).
+/// The assert_cmd harness captures stdout, which is never a TTY - so a plain invocation
+/// without -o already produces JSON. With -o text the output must NOT be JSON.
+#[test]
+fn explicit_output_text_wins_over_auto_when_piped() {
+    let tmp = tempfile::tempdir().unwrap();
+    // Snap something so list has a row to display.
+    std::fs::write(tmp.path().join("f.txt"), b"x").unwrap();
+    tidemark(tmp.path()).args(["snap", "s"]).assert().success();
+
+    // Without -o: piped -> JSON (baseline).
+    let out_json = tidemark(tmp.path()).args(["list"]).assert().success();
+    let json_stdout = String::from_utf8(out_json.get_output().stdout.clone()).unwrap();
+    serde_json::from_str::<serde_json::Value>(&json_stdout)
+        .expect("baseline piped output must be JSON");
+
+    // With -o text: must NOT be JSON, must be text rows.
+    let out_text = tidemark(tmp.path())
+        .args(["list", "-o", "text"])
+        .assert()
+        .success();
+    let text_stdout = String::from_utf8(out_text.get_output().stdout.clone()).unwrap();
+    assert!(
+        serde_json::from_str::<serde_json::Value>(&text_stdout).is_err(),
+        "-o text when piped must not emit JSON; got: {text_stdout:?}"
+    );
+    // The text output must contain the label name.
+    assert!(
+        text_stdout.contains('s'),
+        "-o text must contain the snapshot label; got: {text_stdout:?}"
+    );
+}
+
+/// The structured error envelope must appear as the last line of stderr (clispec Principle 1).
+#[test]
+fn error_envelope_is_last_line_of_stderr() {
+    let tmp = tempfile::tempdir().unwrap();
+    let out = tidemark(tmp.path())
+        .args(["show", "no-such-label"])
+        .assert()
+        .failure();
+    let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
+    let last_line = stderr
+        .trim_end()
+        .lines()
+        .last()
+        .expect("stderr must not be empty");
+    let v: serde_json::Value =
+        serde_json::from_str(last_line).expect("last stderr line must be the JSON error envelope");
+    assert!(
+        v["error"]["kind"].is_string(),
+        "envelope must have error.kind"
+    );
+    assert!(
+        v["error"]["message"].is_string(),
+        "envelope must have error.message"
+    );
 }
