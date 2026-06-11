@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+
+## [0.1.2](https://github.com/rvben/tidemark/compare/v0.1.1...v0.1.2) - 2026-06-11
+
+### Added
+
+- conform to clispec v0.2 ([0f8b1df](https://github.com/rvben/tidemark/commit/0f8b1df841db309aadc393fd4d355d47640f0c62))
+
 ## [0.1.1] - 2026-06-02
 
 ### Added
