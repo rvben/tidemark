@@ -52,6 +52,17 @@ fn global_bounded_flags_accepted_on_default_command() {
 }
 
 #[test]
+fn explicit_text_diff_keeps_data_on_stdout() {
+    let tmp = tempfile::tempdir().unwrap();
+    tidemark(tmp.path())
+        .args(["diff", "@", "@", "--output", "text"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("0 added"))
+        .stderr(predicate::str::is_empty());
+}
+
+#[test]
 fn yes_flag_is_global() {
     let tmp = tempfile::tempdir().unwrap();
     tidemark(tmp.path()).arg("--yes").assert().success();
@@ -155,7 +166,7 @@ fn schema_is_valid_json_with_tool_name() {
     let v: serde_json::Value = serde_json::from_str(&stdout).unwrap();
     // Canonical clispec shape: top-level name + version + commands array.
     assert_eq!(v["name"], "tidemark");
-    assert_eq!(v["clispec"], "0.2");
+    assert_eq!(v["clispec"], "0.3");
     assert!(v["version"].is_string());
     assert!(v["commands"].is_array());
     // list precedes diff so the scorer probes the always-succeeding list command.
@@ -330,13 +341,13 @@ fn error_output_has_retryable_field() {
         .stderr(predicate::str::contains("\"kind\":\"not_found\""));
 }
 
-// --- clispec v0.2 conformance tests ---
+// --- clispec v0.3 conformance tests ---
 
-/// The schema output must validate against the vendored clispec v0.2 JSON Schema.
+/// The schema output must validate against the vendored clispec v0.3 JSON Schema.
 /// This exercises the production `schema` command, not a hand-rolled re-implementation.
 #[test]
-fn schema_validates_against_clispec_v0_2() {
-    let schema_fixture = include_str!("fixtures/clispec-v0.2.json");
+fn schema_validates_against_clispec_v0_3() {
+    let schema_fixture = include_str!("fixtures/clispec-v0.3.json");
     let meta_schema: serde_json::Value =
         serde_json::from_str(schema_fixture).expect("fixture must be valid JSON");
 
@@ -348,7 +359,7 @@ fn schema_validates_against_clispec_v0_2() {
 
     assert!(
         jsonschema::is_valid(&meta_schema, &tool_schema),
-        "schema output does not validate against clispec v0.2. Output was:\n{tool_schema:#}"
+        "schema output does not validate against clispec v0.3. Output was:\n{tool_schema:#}"
     );
 }
 

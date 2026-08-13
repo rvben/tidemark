@@ -531,7 +531,7 @@ fn print_diff_table(report: &crate::diff::DiffReport, page: &[serde_json::Value]
         }
     }
     if !quiet {
-        eprintln!(
+        println!(
             "{} added, {} modified, {} deleted, {} renamed",
             report.added, report.modified, report.deleted, report.renamed
         );

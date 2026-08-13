@@ -1,31 +1,24 @@
-//! The clispec v0.2 schema document for tidemark.
+//! The clispec v0.3 schema document for tidemark.
 
 use serde_json::{Value, json};
 
-/// Build the clispec v0.2 schema describing tidemark's commands, args, output, and
-/// errors. The shape matches `clispec.dev/schema/v0.2.json`: top-level `name`,
-/// `version`, `global_args`, `commands`, and `errors`; each error carries `exit_code`
-/// and `retryable`; each command carries a `mutating` marker and `output_fields`.
+/// Build the clispec v0.3 contract describing tidemark's commands, effects,
+/// cardinality, arguments, output, and errors.
 pub fn schema() -> Value {
     json!({
-        "clispec": "0.2",
+        "clispec": "0.3",
         "name": "tidemark",
         "version": env!("CARGO_PKG_VERSION"),
         "description": "Snapshot a directory tree and diff what changed - no git required.",
+        "output": {"tty": "text", "piped": "json"},
         "global_args": [
             {
                 "name": "--output",
+                "short": "-o",
                 "type": "string",
                 "enum": ["auto", "json", "table", "text"],
                 "default": "auto",
                 "description": "Output format. auto detects the TTY; an explicit value always wins."
-            },
-            {
-                "name": "-o",
-                "type": "string",
-                "enum": ["auto", "json", "table", "text"],
-                "default": "auto",
-                "description": "Shorthand for --output."
             },
             {
                 "name": "--json",
@@ -78,7 +71,9 @@ pub fn schema() -> Value {
         "commands": [
             {
                 "name": "snap",
+                "effects": "non_idempotent",
                 "mutating": true,
+                "cardinality": "single",
                 "stability": "stable",
                 "description": "Snapshot a directory into a manifest (store label and/or -o file).",
                 "args": [
@@ -92,7 +87,7 @@ pub fn schema() -> Value {
                     {"name": "--force", "type": "boolean", "required": false}
                 ],
                 "output_fields": [
-                    {"name": "label", "type": "string | null"},
+                    {"name": "label", "type": "string", "description": "Stored label; omitted when the manifest was only written to a file or stdout."},
                     {"name": "tree_digest", "type": "string"},
                     {"name": "entry_count", "type": "integer"},
                     {"name": "created", "type": "boolean"}
@@ -100,7 +95,11 @@ pub fn schema() -> Value {
             },
             {
                 "name": "list",
+                "effects": "read_only",
                 "mutating": false,
+                "cardinality": "unbounded",
+                "pagination": {"style": "offset", "limit_arg": "--limit", "offset_arg": "--offset"},
+                "fields_arg": "--fields",
                 "stability": "stable",
                 "description": "List stored snapshots.",
                 "args": [
@@ -109,15 +108,19 @@ pub fn schema() -> Value {
                     {"name": "--fields", "type": "string[]", "required": false}
                 ],
                 "output_fields": [
-                    {"name": "items", "type": "StoreItem[]"},
+                    {"name": "items", "type": "array", "items": {"type": "object"}},
                     {"name": "total", "type": "integer"},
-                    {"name": "limit", "type": "integer | null"},
+                    {"name": "limit", "type": "integer", "description": "Requested limit; omitted when no limit was supplied."},
                     {"name": "offset", "type": "integer"}
                 ]
             },
             {
                 "name": "diff",
+                "effects": "read_only",
                 "mutating": false,
+                "cardinality": "unbounded",
+                "pagination": {"style": "offset", "limit_arg": "--limit", "offset_arg": "--offset"},
+                "fields_arg": "--fields",
                 "stability": "stable",
                 "description": "Diff two refs (label | manifest file | @ current tree).",
                 "args": [
@@ -131,38 +134,46 @@ pub fn schema() -> Value {
                     {"name": "--exit-code", "type": "boolean", "required": false}
                 ],
                 "output_fields": [
-                    {"name": "changes", "type": "Change[]"},
+                    {"name": "changes", "type": "array", "items": {"type": "object"}},
                     {"name": "added", "type": "integer"},
                     {"name": "modified", "type": "integer"},
                     {"name": "deleted", "type": "integer"},
                     {"name": "renamed", "type": "integer"},
                     {"name": "total", "type": "integer"},
-                    {"name": "limit", "type": "integer | null"},
+                    {"name": "limit", "type": "integer", "description": "Requested limit; omitted when no limit was supplied."},
                     {"name": "offset", "type": "integer"}
-                ]
+                ],
+                "example": {"args": ["diff", "@", "@"]}
             },
             {
                 "name": "show",
+                "effects": "read_only",
                 "mutating": false,
+                "cardinality": "single",
                 "stability": "stable",
                 "description": "Show a manifest by ref.",
                 "args": [{"name": "reference", "type": "string", "required": true}],
-                "output_fields": [{"name": "manifest", "type": "Manifest"}]
+                "output_fields": [{"name": "manifest", "type": "object"}]
             },
             {
                 "name": "rm",
+                "effects": "non_idempotent",
                 "mutating": true,
+                "cardinality": "bounded",
                 "stability": "stable",
                 "description": "Remove stored snapshots.",
                 "args": [
                     {"name": "labels", "type": "string[]", "required": true},
                     {"name": "--yes", "type": "boolean", "required": false}
                 ],
-                "output_fields": [{"name": "removed", "type": "string[]"}]
+                "output_fields": [{"name": "removed", "type": "array", "items": {"type": "string"}}]
             },
             {
                 "name": "init",
+                "effects": "idempotent",
                 "mutating": true,
+                "cardinality": "single",
+                "idempotency": {"key_args": ["--path"], "conflict_error": "conflict"},
                 "stability": "stable",
                 "description": "Create the snapshot store in the current directory (idempotent).",
                 "args": [{"name": "--path", "type": "path", "required": false, "default": "."}],
@@ -173,11 +184,13 @@ pub fn schema() -> Value {
             },
             {
                 "name": "schema",
+                "effects": "read_only",
                 "mutating": false,
+                "cardinality": "single",
                 "stability": "stable",
                 "description": "Emit this schema.",
                 "args": [],
-                "output_fields": []
+                "stdout_schema": {"$ref": "https://clispec.dev/schema/v0.3.json"}
             }
         ]
     })
@@ -190,7 +203,7 @@ mod tests {
     #[test]
     fn schema_has_required_top_level_keys() {
         let s = schema();
-        assert_eq!(s["clispec"], "0.2");
+        assert_eq!(s["clispec"], "0.3");
         assert_eq!(s["name"], "tidemark");
         assert!(s["version"].is_string());
         assert!(s["commands"].as_array().unwrap().len() >= 6);
@@ -271,7 +284,7 @@ mod tests {
     }
 
     #[test]
-    fn commands_declare_mutating_and_output_fields() {
+    fn commands_declare_effects_and_output_contracts() {
         let s = schema();
         for cmd in s["commands"].as_array().unwrap() {
             assert!(
@@ -280,8 +293,13 @@ mod tests {
                 cmd["name"]
             );
             assert!(
-                cmd.get("output_fields").is_some(),
-                "command {} missing output_fields",
+                cmd["effects"].is_string(),
+                "command {} missing effects",
+                cmd["name"]
+            );
+            assert!(
+                cmd.get("output_fields").is_some() || cmd.get("stdout_schema").is_some(),
+                "command {} missing an output contract",
                 cmd["name"]
             );
         }

@@ -1,6 +1,6 @@
 [package]
 name = "tidemark"
-version = "0.1.2"
+version = "0.1.3"
 edition = "2024"
 rust-version = "1.90"
 description = "Snapshot a directory tree and diff what changed - no git required. Built for humans and agents."
