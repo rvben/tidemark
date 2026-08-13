@@ -218,8 +218,8 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           path: |
-            tidemark-*-${{ matrix.target }}.tar.gz*
-            tidemark-*-${{ matrix.target }}.zip*
+            tidemark-${{ github.ref_name }}-${{ matrix.target }}.tar.gz*
+            tidemark-${{ github.ref_name }}-${{ matrix.target }}.zip*
           name: release-${{ matrix.target }}
 
   sdist:
@@ -306,10 +306,10 @@ jobs:
         with:
           generate_release_notes: true
           files: |
-            artifacts/release-*/tidemark-*.tar.gz
-            artifacts/release-*/tidemark-*.tar.gz.sha256
-            artifacts/release-*/tidemark-*.zip
-            artifacts/release-*/tidemark-*.zip.sha256
+            artifacts/release-*/tidemark-${{ github.ref_name }}-*.tar.gz
+            artifacts/release-*/tidemark-${{ github.ref_name }}-*.tar.gz.sha256
+            artifacts/release-*/tidemark-${{ github.ref_name }}-*.zip
+            artifacts/release-*/tidemark-${{ github.ref_name }}-*.zip.sha256
 
       - name: Dry Run Summary
         if: ${{ inputs.dry_run == true }}
