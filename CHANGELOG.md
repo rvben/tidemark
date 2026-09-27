@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.4](https://github.com/rvben/tidemark/compare/v0.1.3...v0.1.4) - 2026-09-27
+
+### Fixed
+
+- **deps**: update rustls to 0.23.45 for RUSTSEC-2026-0285 ([97bee1d](https://github.com/rvben/tidemark/commit/97bee1d2d9e70e1baece37186d2a592d1ed9fc53))
+- **release**: use package version in dry runs ([e339e99](https://github.com/rvben/tidemark/commit/e339e9980ec26774a2d8ed0188d25aed7aa27b4e))
+- **ci**: install pinned Rust components ([d724e8c](https://github.com/rvben/tidemark/commit/d724e8caefdb8329237938f9fd297bb63d976c31))
+- **release**: scope assets to the current tag ([5c1c5f8](https://github.com/rvben/tidemark/commit/5c1c5f8df360d9eff78c195b51648554c5aef027))
 
 ## [0.1.2](https://github.com/rvben/tidemark/compare/v0.1.1...v0.1.2) - 2026-06-11
 
